@@ -1,15 +1,15 @@
 package com.example.traveling.session;
 
+import com.google.firebase.auth.FirebaseAuth;
+
 /**
  * Gère l'état de session de l'utilisateur.
- * Pour l'instant, tout le monde est en mode anonyme — à brancher sur le vrai
- * système d'authentification plus tard.
+ * S'appuie sur Firebase Auth : si aucun utilisateur n'est connecté,
+ * on considère l'utilisateur comme anonyme.
  */
 public final class SessionManager {
 
     private static final SessionManager INSTANCE = new SessionManager();
-
-    private boolean anonymous = true;
 
     private SessionManager() {}
 
@@ -18,10 +18,6 @@ public final class SessionManager {
     }
 
     public boolean isAnonymous() {
-        return anonymous;
-    }
-
-    public void setAnonymous(boolean anonymous) {
-        this.anonymous = anonymous;
+        return FirebaseAuth.getInstance().getCurrentUser() == null;
     }
 }
