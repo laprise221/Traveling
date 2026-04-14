@@ -8,7 +8,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.navigation.NavController;
-import androidx.navigation.NavOptions;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
 
@@ -35,15 +34,5 @@ public class MainActivity extends AppCompatActivity {
 
         BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
         NavigationUI.setupWithNavController(bottomNav, navController);
-
-        // Force le retour propre à chaque destination top-level (vide la pile)
-        bottomNav.setOnItemSelectedListener(item -> {
-            NavOptions opts = new NavOptions.Builder()
-                    .setLaunchSingleTop(true)
-                    .setPopUpTo(R.id.navigation_explore, false)
-                    .build();
-            navController.navigate(item.getItemId(), null, opts);
-            return true;
-        });
     }
 }

@@ -4,14 +4,12 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.example.traveling.R;
-import com.example.traveling.session.SessionManager;
 import com.google.android.material.button.MaterialButton;
 
 public class CreateFragment extends Fragment {
@@ -30,22 +28,8 @@ public class CreateFragment extends Fragment {
         MaterialButton btnSharePhoto = view.findViewById(R.id.btn_share_photo);
         MaterialButton btnCreatePath = view.findViewById(R.id.btn_create_path);
 
-        btnSharePhoto.setOnClickListener(v -> {
-            if (blockIfAnonymous("Connectez-vous pour publier une photo")) return;
-            openSharePhoto();
-        });
-        btnCreatePath.setOnClickListener(v -> {
-            if (blockIfAnonymous("Connectez-vous pour créer un parcours")) return;
-            openCreatePath();
-        });
-    }
-
-    private boolean blockIfAnonymous(String message) {
-        if (SessionManager.get().isAnonymous()) {
-            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
-            return true;
-        }
-        return false;
+        btnSharePhoto.setOnClickListener(v -> openSharePhoto());
+        btnCreatePath.setOnClickListener(v -> openCreatePath());
     }
 
     private void openSharePhoto() {
