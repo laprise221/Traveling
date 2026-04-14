@@ -21,7 +21,26 @@
         android:id="@+id/navigation_create"
         android:name="com.example.traveling.ui.create.CreateFragment"
         android:label="Créer"
-        tools:layout="@layout/fragment_create" />
+        tools:layout="@layout/fragment_create">
+        <action
+            android:id="@+id/action_create_to_share_photo"
+            app:destination="@id/navigation_share_photo" />
+        <action
+            android:id="@+id/action_create_to_create_path"
+            app:destination="@id/navigation_create_path" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_share_photo"
+        android:name="com.example.traveling.ui.create.SharePhotoFragment"
+        android:label="Partager une photo"
+        tools:layout="@layout/fragment_share_photo" />
+
+    <fragment
+        android:id="@+id/navigation_create_path"
+        android:name="com.example.traveling.ui.create.CreatePathFragment"
+        android:label="Créer un parcours"
+        tools:layout="@layout/fragment_create_path" />
 
     <fragment
         android:id="@+id/navigation_favorites"
