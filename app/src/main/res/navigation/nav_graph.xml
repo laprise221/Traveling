@@ -30,25 +30,16 @@
         tools:layout="@layout/fragment_favorites" />
 
     <fragment
-        android:id="@+id/navigation_search_filter"
-        android:name="com.example.traveling.ui.search.SearchFilterFragment"
-        android:label="Filtres"
-        tools:layout="@layout/fragment_search_filter" />
-
-    <fragment
         android:id="@+id/navigation_profile"
         android:name="com.example.traveling.ui.profile.ProfileFragment"
         android:label="Profil"
         tools:layout="@layout/fragment_profile">
-
         <action
             android:id="@+id/action_profile_to_login"
             app:destination="@id/navigation_login" />
-
         <action
             android:id="@+id/action_profile_to_register"
             app:destination="@id/navigation_register" />
-
     </fragment>
 
     <fragment
@@ -56,11 +47,9 @@
         android:name="com.example.traveling.ui.auth.LoginFragment"
         android:label="Connexion"
         tools:layout="@layout/fragment_login">
-
         <action
             android:id="@+id/action_login_to_register"
             app:destination="@id/navigation_register" />
-
     </fragment>
 
     <fragment
