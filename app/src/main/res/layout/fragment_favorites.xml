@@ -40,16 +40,4 @@
 
     </FrameLayout>
 
-    <!-- Message mode anonyme -->
-    <TextView
-        android:id="@+id/anonymous_favorites_text"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:padding="32dp"
-        android:text="Connectez-vous pour afficher vos favoris"
-        android:textSize="16sp"
-        android:textColor="@android:color/darker_gray"
-        android:visibility="gone" />
-
 </LinearLayout>
