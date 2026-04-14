@@ -75,8 +75,7 @@ public class LoginFragment extends Fragment {
                     progressBar.setVisibility(View.GONE);
                     btnLogin.setEnabled(true);
                     if (task.isSuccessful()) {
-                        Navigation.findNavController(requireView())
-                                .popBackStack(R.id.navigation_profile, false);
+                        Navigation.findNavController(requireView()).navigateUp();
                     } else {
                         String message = task.getException() != null
                                 ? task.getException().getMessage()

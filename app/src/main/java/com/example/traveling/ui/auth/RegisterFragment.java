@@ -12,6 +12,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
@@ -102,8 +103,12 @@ public class RegisterFragment extends Fragment {
                                 .addOnCompleteListener(profileTask -> {
                                     progressBar.setVisibility(View.GONE);
                                     btnRegister.setEnabled(true);
-                                    Navigation.findNavController(requireView())
-                                            .popBackStack(R.id.navigation_profile, false);
+                                    // Revenir au profil : dépiler register puis login
+                                    NavController nav = Navigation.findNavController(requireView());
+                                    if (!nav.popBackStack(R.id.navigation_profile, false)) {
+                                        nav.navigateUp();
+                                        nav.navigateUp();
+                                    }
                                 });
                     } else {
                         progressBar.setVisibility(View.GONE);
