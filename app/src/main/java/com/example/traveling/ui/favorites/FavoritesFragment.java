@@ -4,12 +4,14 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.example.traveling.R;
+import com.example.traveling.session.SessionManager;
 import com.google.android.material.tabs.TabLayout;
 
 public class FavoritesFragment extends Fragment {
@@ -28,6 +30,15 @@ public class FavoritesFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         tabLayout = view.findViewById(R.id.tab_layout_favorites);
+        View favoritesContainer = view.findViewById(R.id.favorites_container);
+        TextView anonymousText = view.findViewById(R.id.anonymous_favorites_text);
+
+        if (isAnonymous()) {
+            tabLayout.setVisibility(View.GONE);
+            favoritesContainer.setVisibility(View.GONE);
+            anonymousText.setVisibility(View.VISIBLE);
+            return;
+        }
 
         tabLayout.addTab(tabLayout.newTab().setText("Photos"));
         tabLayout.addTab(tabLayout.newTab().setText("Parcours"));
@@ -53,6 +64,10 @@ public class FavoritesFragment extends Fragment {
         });
 
         showLikedPhotos();
+    }
+
+    private boolean isAnonymous() {
+        return SessionManager.get().isAnonymous();
     }
 
     private void showLikedPhotos() {
