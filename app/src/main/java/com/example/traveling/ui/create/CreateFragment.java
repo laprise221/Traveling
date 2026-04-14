@@ -4,12 +4,15 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.session.SessionManager;
 import com.google.android.material.button.MaterialButton;
 
 public class CreateFragment extends Fragment {
@@ -33,10 +36,20 @@ public class CreateFragment extends Fragment {
     }
 
     private void openSharePhoto() {
-        // TODO: Ouvrir l'écran de publication de photo (TravelShare)
+        if (SessionManager.get().isAnonymous()) {
+            Toast.makeText(requireContext(),
+                    "Connectez-vous pour partager une photo", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Navigation.findNavController(requireView()).navigate(R.id.action_create_to_share_photo);
     }
 
     private void openCreatePath() {
-        // TODO: Ouvrir l'écran de création de parcours (TravelPath)
+        if (SessionManager.get().isAnonymous()) {
+            Toast.makeText(requireContext(),
+                    "Connectez-vous pour créer un parcours", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Navigation.findNavController(requireView()).navigate(R.id.action_create_to_create_path);
     }
 }
