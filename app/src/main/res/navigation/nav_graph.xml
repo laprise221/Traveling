@@ -60,6 +60,9 @@
         android:label="Profil"
         tools:layout="@layout/fragment_profile">
         <action
+            android:id="@+id/action_profile_to_publications"
+            app:destination="@id/navigation_my_publications" />
+        <action
             android:id="@+id/action_profile_to_groups"
             app:destination="@id/navigation_groups" />
         <action
@@ -69,6 +72,18 @@
             android:id="@+id/action_profile_to_register"
             app:destination="@id/navigation_register" />
     </fragment>
+
+    <fragment
+        android:id="@+id/navigation_photo_detail"
+        android:name="com.example.traveling.ui.detail.PhotoDetailFragment"
+        android:label="Photo"
+        tools:layout="@layout/fragment_photo_detail" />
+
+    <fragment
+        android:id="@+id/navigation_my_publications"
+        android:name="com.example.traveling.ui.profile.MyPublicationsFragment"
+        android:label="Mes publications"
+        tools:layout="@layout/fragment_my_publications" />
 
     <fragment
         android:id="@+id/navigation_groups"

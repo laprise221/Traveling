@@ -15,7 +15,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.data.SampleData;
+import com.example.traveling.data.UserRepository;
 import com.example.traveling.session.SessionManager;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
@@ -109,7 +111,9 @@ public class ExploreFragment extends Fragment
 
     @Override
     public void onPhotoClick(Photo photo) {
-        Toast.makeText(requireContext(), photo.getTitle(), Toast.LENGTH_SHORT).show();
+        PhotoRegistry.set(photo);
+        Navigation.findNavController(requireView())
+                .navigate(R.id.navigation_photo_detail);
     }
 
     @Override
@@ -121,6 +125,8 @@ public class ExploreFragment extends Fragment
             return;
         }
         photo.setLiked(!photo.isLiked());
+        if (photo.isLiked()) UserRepository.get().likePhoto(photo);
+        else UserRepository.get().unlikePhoto(photo);
         photoAdapter1.notifyItemChanged(position);
         photoAdapter2.notifyItemChanged(position);
     }
@@ -139,6 +145,8 @@ public class ExploreFragment extends Fragment
             return;
         }
         path.setLiked(!path.isLiked());
+        if (path.isLiked()) UserRepository.get().likePath(path);
+        else UserRepository.get().unlikePath(path);
         pathAdapter1.notifyItemChanged(position);
         pathAdapter2.notifyItemChanged(position);
     }

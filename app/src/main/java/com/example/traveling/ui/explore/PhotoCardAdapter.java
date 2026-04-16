@@ -46,7 +46,9 @@ public class PhotoCardAdapter extends RecyclerView.Adapter<PhotoCardAdapter.VH> 
     @Override
     public void onBindViewHolder(@NonNull VH h, int position) {
         Photo p = photos.get(position);
-        h.image.setImageResource(p.getImageResId());
+        if (p.getImageBitmap() != null) h.image.setImageBitmap(p.getImageBitmap());
+        else if (p.getImageUri() != null) h.image.setImageURI(p.getImageUri());
+        else h.image.setImageResource(p.getImageResId());
         h.title.setText(p.getTitle());
         h.likes.setText(p.getLikeCount() + " \u2665");
         h.like.setImageResource(p.isLiked()

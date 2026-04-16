@@ -1,7 +1,12 @@
 package com.example.traveling.ui.create;
 
+import android.Manifest;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,10 +18,14 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.UserRepository;
+import com.example.traveling.model.Photo;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
@@ -25,22 +34,53 @@ public class SharePhotoFragment extends Fragment {
 
     private ImageView ivPreview;
     private View pickPlaceholder;
-    private TextInputEditText etTitle;
-    private TextInputEditText etDescription;
-    private TextInputEditText etLocation;
+    private TextInputEditText etTitle, etDescription, etLocation;
     private ChipGroup chipGroupType;
     private SwitchMaterial switchPublic;
 
     private Uri selectedImageUri = null;
+    private Bitmap selectedBitmap = null;
 
-    private final ActivityResultLauncher<String> pickImageLauncher =
+    // 1. Galerie (ACTION_PICK → ouvre la galerie locale directement)
+    private final ActivityResultLauncher<Intent> galleryLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == android.app.Activity.RESULT_OK
+                        && result.getData() != null) {
+                    selectedImageUri = result.getData().getData();
+                    selectedBitmap = null;
+                    ivPreview.setImageURI(selectedImageUri);
+                    showPreview();
+                }
+            });
+
+    // 2. Appareil photo (prévisualisation basse résolution, sans FileProvider)
+    private final ActivityResultLauncher<Void> cameraLauncher =
+            registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
+                if (bitmap != null) {
+                    selectedBitmap = bitmap;
+                    selectedImageUri = null;
+                    ivPreview.setImageBitmap(bitmap);
+                    showPreview();
+                }
+            });
+
+    // 3. Fichiers (picker système, inclut Drive, téléchargements, etc.)
+    private final ActivityResultLauncher<String> fileLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
                 if (uri != null) {
                     selectedImageUri = uri;
+                    selectedBitmap = null;
                     ivPreview.setImageURI(uri);
-                    ivPreview.setVisibility(View.VISIBLE);
-                    pickPlaceholder.setVisibility(View.GONE);
+                    showPreview();
                 }
+            });
+
+    // Permission caméra
+    private final ActivityResultLauncher<String> cameraPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (granted) cameraLauncher.launch(null);
+                else Toast.makeText(requireContext(),
+                        "Permission caméra refusée", Toast.LENGTH_SHORT).show();
             });
 
     @Nullable
@@ -63,12 +103,44 @@ public class SharePhotoFragment extends Fragment {
         switchPublic = view.findViewById(R.id.switch_public);
 
         FrameLayout photoZone = view.findViewById(R.id.photo_picker_zone);
-        photoZone.setOnClickListener(v -> pickImageLauncher.launch("image/*"));
+        photoZone.setOnClickListener(v -> showImageSourceDialog());
 
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
                 Navigation.findNavController(v).navigateUp());
-
         view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
+    }
+
+    private void showImageSourceDialog() {
+        String[] options = {"Galerie", "Appareil photo", "Fichiers / Documents"};
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Choisir une source")
+                .setItems(options, (dialog, which) -> {
+                    switch (which) {
+                        case 0:
+                            galleryLauncher.launch(new Intent(
+                                    Intent.ACTION_PICK,
+                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI));
+                            break;
+                        case 1:
+                            if (ContextCompat.checkSelfPermission(requireContext(),
+                                    Manifest.permission.CAMERA)
+                                    == PackageManager.PERMISSION_GRANTED) {
+                                cameraLauncher.launch(null);
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
+                            }
+                            break;
+                        case 2:
+                            fileLauncher.launch("image/*");
+                            break;
+                    }
+                })
+                .show();
+    }
+
+    private void showPreview() {
+        ivPreview.setVisibility(View.VISIBLE);
+        pickPlaceholder.setVisibility(View.GONE);
     }
 
     private void publish() {
@@ -76,7 +148,7 @@ public class SharePhotoFragment extends Fragment {
         String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
         String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
 
-        if (selectedImageUri == null) {
+        if (selectedImageUri == null && selectedBitmap == null) {
             Toast.makeText(requireContext(), "Veuillez choisir une photo", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -91,10 +163,16 @@ public class SharePhotoFragment extends Fragment {
             return;
         }
 
-        String locationType = getSelectedLocationType();
-        boolean isPublic = switchPublic.isChecked();
+        String id = "user_" + System.currentTimeMillis();
+        String today = new java.text.SimpleDateFormat("dd MMM yyyy",
+                java.util.Locale.FRENCH).format(new java.util.Date());
 
-        // TODO: sauvegarder dans Firestore + uploader l'image dans Firebase Storage
+        Photo photo = new Photo(id, title, description,
+                "Moi", location, 0, 0, today, getSelectedLocationType(), 0, 0);
+        if (selectedBitmap != null) photo.setImageBitmap(selectedBitmap);
+        else photo.setImageUri(selectedImageUri);
+
+        UserRepository.get().addPhoto(photo);
         Toast.makeText(requireContext(), "Photo publiée !", Toast.LENGTH_SHORT).show();
         Navigation.findNavController(requireView()).navigateUp();
     }
