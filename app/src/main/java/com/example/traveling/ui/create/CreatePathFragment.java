@@ -14,6 +14,8 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.UserRepository;
+import com.example.traveling.model.TravelPath;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -133,7 +135,15 @@ public class CreatePathFragment extends Fragment {
         String difficulty = getSelectedChipText(chipGroupDifficulty);
         boolean isPublic = switchPublic.isChecked();
 
-        // TODO: sauvegarder dans Firestore
+        String id = "path_" + System.currentTimeMillis();
+        TravelPath path = new TravelPath(id, title, city, description,
+                "Moi", 0, 0,
+                duration.isEmpty() ? "-" : duration,
+                budget.isEmpty() ? "-" : budget,
+                difficulty.isEmpty() ? "-" : difficulty,
+                "équilibré", steps.size(), 0, R.drawable.sample_path_1);
+        UserRepository.get().addPath(path);
+
         Toast.makeText(requireContext(), "Parcours publié !", Toast.LENGTH_SHORT).show();
         Navigation.findNavController(requireView()).navigateUp();
     }

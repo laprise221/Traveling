@@ -1,5 +1,11 @@
 package com.example.traveling.model;
 
+import android.graphics.Bitmap;
+import android.net.Uri;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class Photo {
 
     private String id;
@@ -10,10 +16,13 @@ public class Photo {
     private double latitude;
     private double longitude;
     private String date;
-    private String locationType; // nature, musée, rue, magasin, etc.
+    private String locationType;
     private int likeCount;
     private boolean liked;
-    private int imageResId; // pour les données de démo (drawable resource)
+    private int imageResId;
+    private Uri imageUri;
+    private Bitmap imageBitmap;
+    private final List<Comment> comments = new ArrayList<>(); // pour les photos prises avec l'appareil photo
 
     public Photo(String id, String title, String description, String author,
                  String locationName, double latitude, double longitude,
@@ -44,6 +53,14 @@ public class Photo {
     public int getLikeCount() { return likeCount; }
     public boolean isLiked() { return liked; }
     public int getImageResId() { return imageResId; }
+
+    public Uri getImageUri() { return imageUri; }
+    public void setImageUri(Uri uri) { this.imageUri = uri; }
+    public Bitmap getImageBitmap() { return imageBitmap; }
+    public void setImageBitmap(Bitmap bitmap) { this.imageBitmap = bitmap; }
+
+    public List<Comment> getComments() { return comments; }
+    public void addComment(Comment c) { comments.add(c); }
 
     public void setLiked(boolean liked) {
         this.liked = liked;

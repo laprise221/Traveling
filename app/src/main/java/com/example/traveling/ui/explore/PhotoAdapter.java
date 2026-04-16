@@ -94,7 +94,9 @@ public class PhotoAdapter extends RecyclerView.Adapter<PhotoAdapter.PhotoViewHol
         }
 
         void bind(Photo photo, int position) {
-            photoImage.setImageResource(photo.getImageResId());
+            if (photo.getImageBitmap() != null) photoImage.setImageBitmap(photo.getImageBitmap());
+            else if (photo.getImageUri() != null) photoImage.setImageURI(photo.getImageUri());
+            else photoImage.setImageResource(photo.getImageResId());
             photoTitle.setText(photo.getTitle());
             photoLocation.setText(photo.getLocationName());
             photoDescription.setText(photo.getDescription());
