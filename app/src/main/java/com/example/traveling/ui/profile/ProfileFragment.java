@@ -41,6 +41,9 @@ public class ProfileFragment extends Fragment {
         layoutConnected = view.findViewById(R.id.layout_connected);
         layoutAnonymous = view.findViewById(R.id.layout_anonymous);
 
+        view.findViewById(R.id.btn_my_groups).setOnClickListener(v ->
+                Navigation.findNavController(v).navigate(R.id.action_profile_to_groups));
+
         view.findViewById(R.id.btn_login).setOnClickListener(v ->
                 Navigation.findNavController(v).navigate(R.id.action_profile_to_login));
         view.findViewById(R.id.btn_register).setOnClickListener(v ->
