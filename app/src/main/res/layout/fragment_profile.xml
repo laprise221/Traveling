@@ -127,6 +127,19 @@
 
             </LinearLayout>
 
+            <!-- Mes groupes -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_my_groups"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginTop="16dp"
+                android:text="Mes groupes"
+                android:textAllCaps="false"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                app:icon="@android:drawable/ic_menu_share"
+                app:iconGravity="start" />
+
             <!-- Mes publications -->
             <TextView
                 android:layout_width="wrap_content"

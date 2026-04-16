@@ -60,12 +60,21 @@
         android:label="Profil"
         tools:layout="@layout/fragment_profile">
         <action
+            android:id="@+id/action_profile_to_groups"
+            app:destination="@id/navigation_groups" />
+        <action
             android:id="@+id/action_profile_to_login"
             app:destination="@id/navigation_login" />
         <action
             android:id="@+id/action_profile_to_register"
             app:destination="@id/navigation_register" />
     </fragment>
+
+    <fragment
+        android:id="@+id/navigation_groups"
+        android:name="com.example.traveling.ui.groups.GroupsFragment"
+        android:label="Mes groupes"
+        tools:layout="@layout/fragment_groups" />
 
     <fragment
         android:id="@+id/navigation_login"
