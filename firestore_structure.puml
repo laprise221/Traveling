@@ -1,0 +1,155 @@
+@startuml Traveling_Firestore_Structure
+
+skinparam classBackgroundColor<<TravelShare>> #DDEEFF
+skinparam classBorderColor<<TravelShare>> #2255AA
+skinparam classHeaderBackgroundColor<<TravelShare>> #4477CC
+skinparam classFontColor<<TravelShare>> #FFFFFF
+
+skinparam classBackgroundColor<<TravelPath>> #DDFFDD
+skinparam classBorderColor<<TravelPath>> #226622
+skinparam classHeaderBackgroundColor<<TravelPath>> #448844
+skinparam classFontColor<<TravelPath>> #FFFFFF
+
+skinparam classBackgroundColor<<Shared>> #F0F0F0
+skinparam classBorderColor<<Shared>> #777777
+skinparam classHeaderBackgroundColor<<Shared>> #999999
+skinparam classFontColor<<Shared>> #FFFFFF
+
+skinparam classBackgroundColor<<SubCollection>> #FFFFFF
+skinparam classBorderColor<<SubCollection>> #AAAAAA
+skinparam classHeaderBackgroundColor<<SubCollection>> #CCCCCC
+skinparam classFontColor<<SubCollection>> #333333
+
+skinparam packageBackgroundColor #FAFAFA
+skinparam packageBorderColor #CCCCCC
+skinparam packageFontSize 13
+skinparam classFontSize 11
+skinparam arrowColor #555555
+skinparam shadowing false
+skinparam linetype ortho
+
+title <b>Traveling App — Firestore Database Structure</b>
+
+' ─────────────────────────────────────────────
+package "Shared" #F5F5F5 {
+
+  class "users/{uid}" <<Shared>> {
+    + displayName : String
+    + email : String
+    + createdAt : Timestamp
+  }
+
+}
+
+' ─────────────────────────────────────────────
+package "TravelShare" #EEF4FF {
+
+  class "photos/{photoId}" <<TravelShare>> {
+    + title : String
+    + description : String
+    + authorId : String
+    + authorName : String
+    + locationName : String
+    + latitude : Double
+    + longitude : Double
+    + date : String
+    + locationType : String
+    + likeCount : Int
+    + commentCount : Int
+    + isPublic : Boolean
+    + groupId : String <i>[nullable]</i>
+    + imageBase64 : String
+    + createdAt : Timestamp
+  }
+
+  class "photos/.../likes/{uid}" <<SubCollection>> {
+    <b>[sub-collection: likes]</b>
+    --
+    + likedAt : Timestamp
+  }
+
+  class "photos/.../comments/{commentId}" <<SubCollection>> {
+    <b>[sub-collection: comments]</b>
+    --
+    + authorId : String
+    + authorName : String
+    + text : String
+    + createdAt : Timestamp
+  }
+
+  class "groups/{groupId}" <<TravelShare>> {
+    + name : String
+    + createdBy : String <i>(uid)</i>
+    + createdAt : Timestamp
+    + members : List<String> <i>(uids)</i>
+    + lastMessage : String
+    + lastMessageTime : Timestamp
+  }
+
+  class "groups/.../messages/{messageId}" <<SubCollection>> {
+    <b>[sub-collection: messages]</b>
+    --
+    + authorId : String
+    + authorName : String
+    + text : String
+    + createdAt : Timestamp
+  }
+
+}
+
+' ─────────────────────────────────────────────
+package "TravelPath" #EFFFEF {
+
+  class "paths/{pathId}" <<TravelPath>> {
+    + title : String
+    + city : String
+    + description : String
+    + authorId : String
+    + authorName : String
+    + duration : String
+    + budget : String
+    + difficulty : String
+    + type : String
+    + likeCount : Int
+    + commentCount : Int
+    + isPublic : Boolean
+    + imageBase64 : String
+    + steps : List<Object>
+    + createdAt : Timestamp
+  }
+
+  class "paths/.../likes/{uid}" <<SubCollection>> {
+    <b>[sub-collection: likes]</b>
+    --
+    + likedAt : Timestamp
+  }
+
+  class "paths/.../comments/{commentId}" <<SubCollection>> {
+    <b>[sub-collection: comments]</b>
+    --
+    + authorId : String
+    + authorName : String
+    + text : String
+    + createdAt : Timestamp
+  }
+
+}
+
+' ─────────────────────────────────────────────
+' Relationships — sub-collections (composition)
+"photos/{photoId}"             *-down- "photos/.../likes/{uid}"     : contains >
+"photos/{photoId}"             *-down- "photos/.../comments/{commentId}" : contains >
+
+"groups/{groupId}"             *-down- "groups/.../messages/{messageId}" : contains >
+
+"paths/{pathId}"               *-down- "paths/.../likes/{uid}"      : contains >
+"paths/{pathId}"               *-down- "paths/.../comments/{commentId}" : contains >
+
+' ─────────────────────────────────────────────
+' Cross-collection references (dashed)
+"photos/{photoId}" ..> "users/{uid}" : authorId →
+"groups/{groupId}" ..> "users/{uid}" : createdBy / members →
+"paths/{pathId}"   ..> "users/{uid}" : authorId →
+"photos/{photoId}" ..> "groups/{groupId}" : groupId →
+
+@enduml

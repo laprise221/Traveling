@@ -16,6 +16,7 @@ import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.FirestoreRepository;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
@@ -103,7 +104,11 @@ public class RegisterFragment extends Fragment {
                                 .addOnCompleteListener(profileTask -> {
                                     progressBar.setVisibility(View.GONE);
                                     btnRegister.setEnabled(true);
-                                    // Revenir au profil : dépiler register puis login
+
+                                    // Save user profile to Firestore
+                                    String uid = task.getResult().getUser().getUid();
+                                    FirestoreRepository.get().saveUser(uid, username, email);
+
                                     NavController nav = Navigation.findNavController(requireView());
                                     if (!nav.popBackStack(R.id.navigation_profile, false)) {
                                         nav.navigateUp();

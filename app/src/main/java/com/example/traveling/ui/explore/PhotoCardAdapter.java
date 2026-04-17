@@ -48,7 +48,7 @@ public class PhotoCardAdapter extends RecyclerView.Adapter<PhotoCardAdapter.VH> 
         Photo p = photos.get(position);
         if (p.getImageBitmap() != null) h.image.setImageBitmap(p.getImageBitmap());
         else if (p.getImageUri() != null) h.image.setImageURI(p.getImageUri());
-        else h.image.setImageResource(p.getImageResId());
+        else if (p.getImageResId() != 0) h.image.setImageResource(p.getImageResId());
         h.title.setText(p.getTitle());
         h.likes.setText(p.getLikeCount() + " \u2665");
         h.like.setImageResource(p.isLiked()

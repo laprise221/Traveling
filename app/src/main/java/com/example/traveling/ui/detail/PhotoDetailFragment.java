@@ -18,13 +18,14 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.PhotoRegistry;
-import com.example.traveling.data.UserRepository;
 import com.example.traveling.model.Comment;
 import com.example.traveling.model.Photo;
 import com.example.traveling.session.SessionManager;
 import com.google.android.material.chip.Chip;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -86,15 +87,27 @@ public class PhotoDetailFragment extends Fragment {
         // Like
         btnLike = view.findViewById(R.id.btn_like);
         likeCount = view.findViewById(R.id.detail_like_count);
+
+        // Check if current user liked this photo
+        if (!isAnonymous && photo.getId() != null) {
+            FirestoreRepository.get().isPhotoLiked(photo.getId(), liked -> {
+                if (!isAdded()) return;
+                photo.setLikedSilent(liked);
+                updateLikeUI();
+            });
+        }
         updateLikeUI();
 
         btnLike.setEnabled(!isAnonymous);
         btnLike.setAlpha(isAnonymous ? 0.4f : 1f);
         btnLike.setOnClickListener(v -> {
-            photo.setLiked(!photo.isLiked());
-            if (photo.isLiked()) UserRepository.get().likePhoto(photo);
-            else UserRepository.get().unlikePhoto(photo);
+            boolean newLiked = !photo.isLiked();
+            photo.setLiked(newLiked);
             updateLikeUI();
+            // Persist to Firestore
+            if (photo.getId() != null) {
+                FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
+            }
         });
 
         // Commentaires
@@ -103,7 +116,18 @@ public class PhotoDetailFragment extends Fragment {
         commentAdapter = new CommentAdapter();
         recycler.setLayoutManager(new LinearLayoutManager(requireContext()));
         recycler.setAdapter(commentAdapter);
-        refreshComments();
+
+        // Load comments from Firestore
+        if (photo.getId() != null) {
+            FirestoreRepository.get().loadPhotoComments(photo.getId(), comments -> {
+                if (!isAdded()) return;
+                photo.getComments().clear();
+                photo.getComments().addAll(comments);
+                refreshComments();
+            });
+        } else {
+            refreshComments();
+        }
 
         // Saisie commentaire
         View inputLayout = view.findViewById(R.id.layout_comment_input);
@@ -119,18 +143,30 @@ public class PhotoDetailFragment extends Fragment {
                 String text = etComment.getText().toString().trim();
                 if (text.isEmpty()) return;
 
-                String author = "Moi";
-                if (FirebaseAuth.getInstance().getCurrentUser() != null) {
-                    String name = FirebaseAuth.getInstance().getCurrentUser().getDisplayName();
-                    if (name != null && !name.isEmpty()) author = name;
+                FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                String authorName = "Moi";
+                String authorId = "";
+                if (user != null) {
+                    authorId = user.getUid();
+                    String name = user.getDisplayName();
+                    if (name != null && !name.isEmpty()) authorName = name;
                 }
+
                 String date = new SimpleDateFormat("dd MMM yyyy", Locale.FRENCH)
                         .format(new Date());
                 Comment comment = new Comment(
-                        "c_" + System.currentTimeMillis(), author, text, date);
+                        "c_" + System.currentTimeMillis(), authorName, text, date);
+                comment.setAuthorId(authorId);
+
+                // Add locally for immediate UI feedback
                 photo.addComment(comment);
                 etComment.setText("");
                 refreshComments();
+
+                // Persist to Firestore
+                if (photo.getId() != null) {
+                    FirestoreRepository.get().addPhotoComment(photo.getId(), comment, null);
+                }
             });
         }
     }

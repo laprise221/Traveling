@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -24,11 +25,14 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
-import com.example.traveling.data.UserRepository;
+import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.ImageUtils;
 import com.example.traveling.model.Photo;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 public class SharePhotoFragment extends Fragment {
 
@@ -41,7 +45,6 @@ public class SharePhotoFragment extends Fragment {
     private Uri selectedImageUri = null;
     private Bitmap selectedBitmap = null;
 
-    // 1. Galerie (ACTION_PICK → ouvre la galerie locale directement)
     private final ActivityResultLauncher<Intent> galleryLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() == android.app.Activity.RESULT_OK
@@ -53,7 +56,6 @@ public class SharePhotoFragment extends Fragment {
                 }
             });
 
-    // 2. Appareil photo (prévisualisation basse résolution, sans FileProvider)
     private final ActivityResultLauncher<Void> cameraLauncher =
             registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
                 if (bitmap != null) {
@@ -64,7 +66,6 @@ public class SharePhotoFragment extends Fragment {
                 }
             });
 
-    // 3. Fichiers (picker système, inclut Drive, téléchargements, etc.)
     private final ActivityResultLauncher<String> fileLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
                 if (uri != null) {
@@ -75,7 +76,6 @@ public class SharePhotoFragment extends Fragment {
                 }
             });
 
-    // Permission caméra
     private final ActivityResultLauncher<String> cameraPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (granted) cameraLauncher.launch(null);
@@ -163,18 +163,62 @@ public class SharePhotoFragment extends Fragment {
             return;
         }
 
-        String id = "user_" + System.currentTimeMillis();
+        // Convert image to Base64
+        String imageBase64;
+        if (selectedBitmap != null) {
+            imageBase64 = ImageUtils.bitmapToBase64(selectedBitmap);
+        } else {
+            imageBase64 = ImageUtils.uriToBase64(requireContext(), selectedImageUri);
+        }
+        if (imageBase64 == null) {
+            Toast.makeText(requireContext(), "Erreur lors du traitement de l'image", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Get current user info
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        String authorId = user != null ? user.getUid() : "";
+        String authorName = "Moi";
+        if (user != null && user.getDisplayName() != null && !user.getDisplayName().isEmpty()) {
+            authorName = user.getDisplayName();
+        }
+
         String today = new java.text.SimpleDateFormat("dd MMM yyyy",
                 java.util.Locale.FRENCH).format(new java.util.Date());
 
-        Photo photo = new Photo(id, title, description,
-                "Moi", location, 0, 0, today, getSelectedLocationType(), 0, 0);
+        boolean isPublic = switchPublic.isChecked();
+
+        // Build Photo object
+        Photo photo = new Photo();
+        photo.setTitle(title);
+        photo.setDescription(description);
+        photo.setAuthorId(authorId);
+        photo.setAuthorName(authorName);
+        photo.setLocationName(location);
+        photo.setDate(today);
+        photo.setLocationType(getSelectedLocationType());
+        photo.setIsPublic(isPublic);
+        photo.setImageBase64(imageBase64);
         if (selectedBitmap != null) photo.setImageBitmap(selectedBitmap);
         else photo.setImageUri(selectedImageUri);
 
-        UserRepository.get().addPhoto(photo);
-        Toast.makeText(requireContext(), "Photo publiée !", Toast.LENGTH_SHORT).show();
-        Navigation.findNavController(requireView()).navigateUp();
+        // Disable publish button to prevent double-tap
+        requireView().findViewById(R.id.btn_publish).setEnabled(false);
+
+        // Save to Firestore
+        FirestoreRepository.get().savePhoto(photo,
+                id -> {
+                    if (isAdded()) {
+                        Toast.makeText(requireContext(), "Photo publiée !", Toast.LENGTH_SHORT).show();
+                        Navigation.findNavController(requireView()).navigateUp();
+                    }
+                },
+                e -> {
+                    if (isAdded()) {
+                        requireView().findViewById(R.id.btn_publish).setEnabled(true);
+                        Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private String getSelectedLocationType() {

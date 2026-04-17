@@ -46,7 +46,8 @@ public class PathCardAdapter extends RecyclerView.Adapter<PathCardAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH h, int position) {
         TravelPath p = paths.get(position);
-        h.image.setImageResource(p.getImageResId());
+        if (p.getImageResId() != 0) h.image.setImageResource(p.getImageResId());
+        else h.image.setImageResource(R.drawable.sample_path_1); // fallback
         h.title.setText(p.getTitle());
         h.likes.setText(p.getLikeCount() + " \u2665");
         h.like.setImageResource(p.isLiked()

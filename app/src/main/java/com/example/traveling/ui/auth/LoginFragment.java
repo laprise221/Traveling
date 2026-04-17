@@ -15,9 +15,11 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.FirestoreRepository;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 public class LoginFragment extends Fragment {
 
@@ -75,6 +77,13 @@ public class LoginFragment extends Fragment {
                     progressBar.setVisibility(View.GONE);
                     btnLogin.setEnabled(true);
                     if (task.isSuccessful()) {
+                        // Update user profile in Firestore
+                        FirebaseUser user = mAuth.getCurrentUser();
+                        if (user != null) {
+                            String name = user.getDisplayName() != null ? user.getDisplayName() : "";
+                            String userEmail = user.getEmail() != null ? user.getEmail() : "";
+                            FirestoreRepository.get().saveUser(user.getUid(), name, userEmail);
+                        }
                         Navigation.findNavController(requireView()).navigateUp();
                     } else {
                         String message = task.getException() != null

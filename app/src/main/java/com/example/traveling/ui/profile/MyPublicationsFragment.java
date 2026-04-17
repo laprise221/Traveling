@@ -12,18 +12,20 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
-import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.PhotoRegistry;
-import com.example.traveling.data.UserRepository;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
 import com.google.android.material.tabs.TabLayout;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MyPublicationsFragment extends Fragment {
@@ -74,19 +76,31 @@ public class MyPublicationsFragment extends Fragment {
     }
 
     private void refreshList() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) {
+            setEmpty(true);
+            return;
+        }
+
+        String uid = user.getUid();
+
         if (showingPhotos) {
-            List<Photo> photos = UserRepository.get().getMyPhotos();
-            PhotoPublicationAdapter adapter = new PhotoPublicationAdapter(photos, this::onDeletePhoto);
-            adapter.setOnClickListener(photo -> {
-                PhotoRegistry.set(photo);
-                Navigation.findNavController(requireView()).navigate(R.id.navigation_photo_detail);
+            FirestoreRepository.get().loadUserPhotos(uid, photos -> {
+                if (!isAdded()) return;
+                PhotoPublicationAdapter adapter = new PhotoPublicationAdapter(photos, this::onDeletePhoto);
+                adapter.setOnClickListener(photo -> {
+                    PhotoRegistry.set(photo);
+                    Navigation.findNavController(requireView()).navigate(R.id.navigation_photo_detail);
+                });
+                recycler.setAdapter(adapter);
+                setEmpty(photos.isEmpty());
             });
-            recycler.setAdapter(adapter);
-            setEmpty(photos.isEmpty());
         } else {
-            List<TravelPath> paths = UserRepository.get().getMyPaths();
-            recycler.setAdapter(new PathPublicationAdapter(paths, this::onDeletePath));
-            setEmpty(paths.isEmpty());
+            FirestoreRepository.get().loadUserPaths(uid, paths -> {
+                if (!isAdded()) return;
+                recycler.setAdapter(new PathPublicationAdapter(paths, this::onDeletePath));
+                setEmpty(paths.isEmpty());
+            });
         }
     }
 
@@ -100,8 +114,9 @@ public class MyPublicationsFragment extends Fragment {
                 .setTitle("Supprimer")
                 .setMessage("Supprimer \"" + photo.getTitle() + "\" ?")
                 .setPositiveButton("Supprimer", (d, w) -> {
-                    UserRepository.get().removePhoto(photo);
-                    refreshList();
+                    if (photo.getId() != null) {
+                        FirestoreRepository.get().deletePhoto(photo.getId(), v -> refreshList());
+                    }
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
@@ -112,8 +127,9 @@ public class MyPublicationsFragment extends Fragment {
                 .setTitle("Supprimer")
                 .setMessage("Supprimer \"" + path.getTitle() + "\" ?")
                 .setPositiveButton("Supprimer", (d, w) -> {
-                    UserRepository.get().removePath(path);
-                    refreshList();
+                    if (path.getId() != null) {
+                        FirestoreRepository.get().deletePath(path.getId(), v -> refreshList());
+                    }
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
@@ -164,7 +180,7 @@ public class MyPublicationsFragment extends Fragment {
         }
         @Override public void onBindViewHolder(@NonNull PublicationVH h, int pos) {
             TravelPath path = items.get(pos);
-            h.image.setImageResource(path.getImageResId());
+            if (path.getImageResId() != 0) h.image.setImageResource(path.getImageResId());
             h.title.setText(path.getTitle());
             h.subtitle.setText(path.getCity() + " · " + path.getDuration());
             h.date.setText(path.getBudget() + " · " + path.getDifficulty());

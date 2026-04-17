@@ -98,7 +98,8 @@ public class PathAdapter extends RecyclerView.Adapter<PathAdapter.PathViewHolder
         }
 
         void bind(TravelPath path, int position) {
-            pathImage.setImageResource(path.getImageResId());
+            if (path.getImageResId() != 0) pathImage.setImageResource(path.getImageResId());
+            else pathImage.setImageResource(R.drawable.sample_path_1); // fallback
             pathTitle.setText(path.getTitle());
             pathCity.setText(path.getCity());
             pathDescription.setText(path.getDescription());

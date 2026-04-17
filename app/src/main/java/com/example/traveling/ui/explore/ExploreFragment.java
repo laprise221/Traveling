@@ -4,6 +4,8 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -15,15 +17,16 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.PhotoRegistry;
-import com.example.traveling.data.SampleData;
-import com.example.traveling.data.UserRepository;
 import com.example.traveling.session.SessionManager;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
+
+import java.util.List;
 
 public class ExploreFragment extends Fragment
         implements PhotoCardAdapter.Listener, PathCardAdapter.Listener {
@@ -60,11 +63,6 @@ public class ExploreFragment extends Fragment
         pathAdapter1 = new PathCardAdapter(this);
         pathAdapter2 = new PathCardAdapter(this);
 
-        photoAdapter1.setPhotos(SampleData.getSamplePhotos());
-        photoAdapter2.setPhotos(SampleData.getSamplePhotos());
-        pathAdapter1.setPaths(SampleData.getSamplePaths());
-        pathAdapter2.setPaths(SampleData.getSamplePaths());
-
         // Onglets
         tabLayout.addTab(tabLayout.newTab().setText("Photos"));
         tabLayout.addTab(tabLayout.newTab().setText("Parcours"));
@@ -77,6 +75,10 @@ public class ExploreFragment extends Fragment
             @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
         updateContent();
+
+        // Load data from Firestore
+        loadPhotosFromFirestore();
+        loadPathsFromFirestore();
 
         searchBar.setOnClickListener(v -> {
             NavOptions opts = new NavOptions.Builder()
@@ -97,6 +99,42 @@ public class ExploreFragment extends Fragment
             Toast.makeText(requireContext(), "Planifier un parcours (TravelPath)",
                     Toast.LENGTH_SHORT).show();
         });
+    }
+
+    private void loadPhotosFromFirestore() {
+        FirestoreRepository.get().loadPublicPhotos(photos -> {
+            if (!isAdded()) return;
+            photoAdapter1.setPhotos(photos);
+            photoAdapter2.setPhotos(photos);
+            // Check liked status for current user
+            FirestoreRepository.get().checkLikedPhotos(photos, () -> {
+                if (!isAdded()) return;
+                photoAdapter1.notifyDataSetChanged();
+                photoAdapter2.notifyDataSetChanged();
+            });
+        });
+    }
+
+    private void loadPathsFromFirestore() {
+        FirestoreRepository.get().loadPublicPaths(paths -> {
+            if (!isAdded()) return;
+            pathAdapter1.setPaths(paths);
+            pathAdapter2.setPaths(paths);
+            // Check liked status
+            FirestoreRepository.get().checkLikedPaths(paths, () -> {
+                if (!isAdded()) return;
+                pathAdapter1.notifyDataSetChanged();
+                pathAdapter2.notifyDataSetChanged();
+            });
+        });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Reload on return to refresh data
+        loadPhotosFromFirestore();
+        loadPathsFromFirestore();
     }
 
     private void updateContent() {
@@ -124,11 +162,12 @@ public class ExploreFragment extends Fragment
                     Toast.LENGTH_SHORT).show();
             return;
         }
-        photo.setLiked(!photo.isLiked());
-        if (photo.isLiked()) UserRepository.get().likePhoto(photo);
-        else UserRepository.get().unlikePhoto(photo);
+        boolean newLiked = !photo.isLiked();
+        photo.setLiked(newLiked);
         photoAdapter1.notifyItemChanged(position);
         photoAdapter2.notifyItemChanged(position);
+        // Persist to Firestore
+        FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
     }
 
     @Override
@@ -144,10 +183,11 @@ public class ExploreFragment extends Fragment
                     Toast.LENGTH_SHORT).show();
             return;
         }
-        path.setLiked(!path.isLiked());
-        if (path.isLiked()) UserRepository.get().likePath(path);
-        else UserRepository.get().unlikePath(path);
+        boolean newLiked = !path.isLiked();
+        path.setLiked(newLiked);
         pathAdapter1.notifyItemChanged(position);
         pathAdapter2.notifyItemChanged(position);
+        // Persist to Firestore
+        FirestoreRepository.get().toggleLikePath(path.getId(), newLiked, null);
     }
 }

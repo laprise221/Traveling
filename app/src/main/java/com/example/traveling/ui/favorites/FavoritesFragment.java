@@ -14,7 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
-import com.example.traveling.data.UserRepository;
+import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
 import com.example.traveling.session.SessionManager;
@@ -81,7 +81,6 @@ public class FavoritesFragment extends Fragment
     @Override
     public void onResume() {
         super.onResume();
-        // Rafraîchit à chaque retour sur l'onglet
         if (!SessionManager.get().isAnonymous()) {
             int selected = tabLayout.getSelectedTabPosition();
             if (selected == 1) showLikedPaths();
@@ -90,17 +89,42 @@ public class FavoritesFragment extends Fragment
     }
 
     private void showLikedPhotos() {
-        List<Photo> photos = UserRepository.get().getLikedPhotos();
         recyclerView.setAdapter(photoAdapter);
-        photoAdapter.setPhotos(photos);
-        emptyText.setVisibility(photos.isEmpty() ? View.VISIBLE : View.GONE);
+        emptyText.setVisibility(View.GONE);
+
+        // Load liked photo IDs, then load the full photo documents
+        FirestoreRepository.get().loadLikedPhotoIds(photoIds -> {
+            if (!isAdded()) return;
+            if (photoIds.isEmpty()) {
+                photoAdapter.setPhotos(new java.util.ArrayList<>());
+                emptyText.setVisibility(View.VISIBLE);
+                return;
+            }
+            FirestoreRepository.get().loadPhotosByIds(photoIds, photos -> {
+                if (!isAdded()) return;
+                photoAdapter.setPhotos(photos);
+                emptyText.setVisibility(photos.isEmpty() ? View.VISIBLE : View.GONE);
+            });
+        });
     }
 
     private void showLikedPaths() {
-        List<TravelPath> paths = UserRepository.get().getLikedPaths();
         recyclerView.setAdapter(pathAdapter);
-        pathAdapter.setPaths(paths);
-        emptyText.setVisibility(paths.isEmpty() ? View.VISIBLE : View.GONE);
+        emptyText.setVisibility(View.GONE);
+
+        FirestoreRepository.get().loadLikedPathIds(pathIds -> {
+            if (!isAdded()) return;
+            if (pathIds.isEmpty()) {
+                pathAdapter.setPaths(new java.util.ArrayList<>());
+                emptyText.setVisibility(View.VISIBLE);
+                return;
+            }
+            FirestoreRepository.get().loadPathsByIds(pathIds, paths -> {
+                if (!isAdded()) return;
+                pathAdapter.setPaths(paths);
+                emptyText.setVisibility(paths.isEmpty() ? View.VISIBLE : View.GONE);
+            });
+        });
     }
 
     @Override public void onPhotoClick(Photo photo) {
@@ -108,9 +132,12 @@ public class FavoritesFragment extends Fragment
     }
 
     @Override public void onLikeClick(Photo photo, int position) {
+        // Unlike from favorites
         photo.setLiked(false);
-        UserRepository.get().unlikePhoto(photo);
-        showLikedPhotos();
+        if (photo.getId() != null) {
+            FirestoreRepository.get().toggleLikePhoto(photo.getId(), false, null);
+        }
+        showLikedPhotos(); // Refresh the list
     }
 
     @Override public void onPathClick(TravelPath path) {
@@ -119,7 +146,9 @@ public class FavoritesFragment extends Fragment
 
     @Override public void onLikeClick(TravelPath path, int position) {
         path.setLiked(false);
-        UserRepository.get().unlikePath(path);
+        if (path.getId() != null) {
+            FirestoreRepository.get().toggleLikePath(path.getId(), false, null);
+        }
         showLikedPaths();
     }
 }

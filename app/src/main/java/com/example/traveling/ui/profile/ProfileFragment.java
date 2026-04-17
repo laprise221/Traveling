@@ -5,20 +5,17 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
+
 import com.example.traveling.R;
-import com.example.traveling.data.UserRepository;
-import com.google.android.material.button.MaterialButton;
+import com.example.traveling.data.FirestoreRepository;
 import com.google.android.material.card.MaterialCardView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-
-import java.util.List;
 
 public class ProfileFragment extends Fragment {
 
@@ -61,7 +58,6 @@ public class ProfileFragment extends Fragment {
 
         view.findViewById(R.id.btn_logout).setOnClickListener(v -> {
             FirebaseAuth.getInstance().signOut();
-            UserRepository.get().clear();
             updateUI();
         });
     }
@@ -89,7 +85,7 @@ public class ProfileFragment extends Fragment {
             }
             profileEmail.setText(user.getEmail() != null ? user.getEmail() : "");
 
-            updatePublications();
+            updatePublications(user.getUid());
         } else {
             layoutConnected.setVisibility(View.GONE);
             layoutAnonymous.setVisibility(View.VISIBLE);
@@ -99,15 +95,23 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    private void updatePublications() {
-        UserRepository repo = UserRepository.get();
-        int photoCount = repo.getMyPhotos().size();
-        int pathCount = repo.getMyPaths().size();
-        int total = photoCount + pathCount;
+    private void updatePublications(String uid) {
+        // Load photo count from Firestore
+        FirestoreRepository.get().loadUserPhotos(uid, photos -> {
+            if (!isAdded()) return;
+            int photoCount = photos.size();
+            statPhotosCount.setText(String.valueOf(photoCount));
 
-        statPhotosCount.setText(String.valueOf(photoCount));
-        statPathsCount.setText(String.valueOf(pathCount));
-        tvPublicationsCount.setText(total + " contenu" + (total > 1 ? "s" : ""));
+            // Load path count from Firestore
+            FirestoreRepository.get().loadUserPaths(uid, paths -> {
+                if (!isAdded()) return;
+                int pathCount = paths.size();
+                statPathsCount.setText(String.valueOf(pathCount));
+
+                int total = photoCount + pathCount;
+                tvPublicationsCount.setText(total + " contenu" + (total > 1 ? "s" : ""));
+            });
+        });
     }
 
     private String getInitials(String fullName) {
@@ -118,5 +122,4 @@ public class ProfileFragment extends Fragment {
         }
         return String.valueOf(fullName.charAt(0)).toUpperCase();
     }
-
 }
