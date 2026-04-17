@@ -8,6 +8,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.navigation.NavController;
+import androidx.navigation.NavOptions;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
 
@@ -27,12 +28,25 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        // Configuration de la navigation
         NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.nav_host_fragment);
         NavController navController = navHostFragment.getNavController();
 
         BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
         NavigationUI.setupWithNavController(bottomNav, navController);
+
+        bottomNav.setOnItemSelectedListener(item -> {
+            int destId = item.getItemId();
+
+            // Toujours revenir à la racine (explore) d'abord, puis aller à la destination.
+            // popUpTo explore inclusive=false : garde explore, vide ce qui est au-dessus.
+            NavOptions opts = new NavOptions.Builder()
+                    .setLaunchSingleTop(true)
+                    .setPopUpTo(R.id.navigation_explore, false)
+                    .build();
+
+            navController.navigate(destId, null, opts);
+            return true;
+        });
     }
 }

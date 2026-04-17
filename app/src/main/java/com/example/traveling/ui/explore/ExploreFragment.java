@@ -1,43 +1,36 @@
 package com.example.traveling.ui.explore;
 
 import android.os.Bundle;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.NavOptions;
+import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.data.SampleData;
+import com.example.traveling.data.UserRepository;
+import com.example.traveling.session.SessionManager;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.textfield.TextInputEditText;
-
-import java.util.List;
 
 public class ExploreFragment extends Fragment
-        implements PhotoAdapter.OnPhotoClickListener, PathAdapter.OnPathClickListener {
+        implements PhotoCardAdapter.Listener, PathCardAdapter.Listener {
 
-    private TabLayout tabLayout;
-    private RecyclerView recyclerView;
-    private TextView emptyStateText;
-    private TextInputEditText searchEditText;
-
-    private PhotoAdapter photoAdapter;
-    private PathAdapter pathAdapter;
-
-    private List<Photo> allPhotos;
-    private List<TravelPath> allPaths;
-
+    private PhotoCardAdapter photoAdapter1, photoAdapter2;
+    private PathCardAdapter pathAdapter1, pathAdapter2;
+    private RecyclerView recycler1, recycler2;
     private boolean showingPhotos = true;
 
     @Nullable
@@ -51,116 +44,110 @@ public class ExploreFragment extends Fragment
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        tabLayout = view.findViewById(R.id.tab_layout_explore);
-        recyclerView = view.findViewById(R.id.recycler_explore);
-        emptyStateText = view.findViewById(R.id.empty_state_text);
-        searchEditText = view.findViewById(R.id.search_edit_text);
+        MaterialCardView searchBar = view.findViewById(R.id.search_bar_card);
+        MaterialButton planBtn = view.findViewById(R.id.btn_plan_path);
+        TabLayout tabLayout = view.findViewById(R.id.tab_layout_explore);
+        recycler1 = view.findViewById(R.id.recycler_photos);
+        recycler2 = view.findViewById(R.id.recycler_paths);
 
-        // Charger les données
-        allPhotos = SampleData.getSamplePhotos();
-        allPaths = SampleData.getSamplePaths();
+        recycler1.setLayoutManager(
+                new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
+        recycler2.setLayoutManager(
+                new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
 
-        // Configurer les adaptateurs
-        photoAdapter = new PhotoAdapter(this);
-        pathAdapter = new PathAdapter(this);
+        photoAdapter1 = new PhotoCardAdapter(this);
+        photoAdapter2 = new PhotoCardAdapter(this);
+        pathAdapter1 = new PathCardAdapter(this);
+        pathAdapter2 = new PathCardAdapter(this);
 
-        recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
+        photoAdapter1.setPhotos(SampleData.getSamplePhotos());
+        photoAdapter2.setPhotos(SampleData.getSamplePhotos());
+        pathAdapter1.setPaths(SampleData.getSamplePaths());
+        pathAdapter2.setPaths(SampleData.getSamplePaths());
 
         // Onglets
         tabLayout.addTab(tabLayout.newTab().setText("Photos"));
         tabLayout.addTab(tabLayout.newTab().setText("Parcours"));
-
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
-            @Override
-            public void onTabSelected(TabLayout.Tab tab) {
+            @Override public void onTabSelected(TabLayout.Tab tab) {
                 showingPhotos = tab.getPosition() == 0;
-                updateList();
+                updateContent();
             }
+            @Override public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override public void onTabReselected(TabLayout.Tab tab) {}
+        });
+        updateContent();
 
-            @Override
-            public void onTabUnselected(TabLayout.Tab tab) {}
-
-            @Override
-            public void onTabReselected(TabLayout.Tab tab) {}
+        searchBar.setOnClickListener(v -> {
+            NavOptions opts = new NavOptions.Builder()
+                    .setLaunchSingleTop(true)
+                    .setPopUpTo(R.id.navigation_explore, false)
+                    .build();
+            Navigation.findNavController(v)
+                    .navigate(R.id.navigation_search_filter, null, opts);
         });
 
-        // Recherche
-        searchEditText.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                filterList(s.toString());
+        planBtn.setOnClickListener(v -> {
+            if (SessionManager.get().isAnonymous()) {
+                Toast.makeText(requireContext(),
+                        "Connectez-vous pour planifier un parcours",
+                        Toast.LENGTH_SHORT).show();
+                return;
             }
-
-            @Override
-            public void afterTextChanged(Editable s) {}
+            Toast.makeText(requireContext(), "Planifier un parcours (TravelPath)",
+                    Toast.LENGTH_SHORT).show();
         });
-
-        // Afficher les photos par défaut
-        showingPhotos = true;
-        updateList();
     }
 
-    private void updateList() {
-        String query = searchEditText.getText() != null
-                ? searchEditText.getText().toString() : "";
-
+    private void updateContent() {
         if (showingPhotos) {
-            recyclerView.setAdapter(photoAdapter);
-            photoAdapter.setPhotos(allPhotos);
-            if (!query.isEmpty()) {
-                photoAdapter.filterByQuery(allPhotos, query);
-            }
-            emptyStateText.setVisibility(allPhotos.isEmpty() ? View.VISIBLE : View.GONE);
+            recycler1.setAdapter(photoAdapter1);
+            recycler2.setAdapter(photoAdapter2);
         } else {
-            recyclerView.setAdapter(pathAdapter);
-            pathAdapter.setPaths(allPaths);
-            if (!query.isEmpty()) {
-                pathAdapter.filterByQuery(allPaths, query);
-            }
-            emptyStateText.setVisibility(allPaths.isEmpty() ? View.VISIBLE : View.GONE);
+            recycler1.setAdapter(pathAdapter1);
+            recycler2.setAdapter(pathAdapter2);
         }
     }
-
-    private void filterList(String query) {
-        if (showingPhotos) {
-            photoAdapter.filterByQuery(allPhotos, query);
-        } else {
-            pathAdapter.filterByQuery(allPaths, query);
-        }
-    }
-
-    // --- PhotoAdapter callbacks ---
 
     @Override
     public void onPhotoClick(Photo photo) {
-        Toast.makeText(requireContext(),
-                photo.getTitle() + " - " + photo.getLocationName(),
-                Toast.LENGTH_SHORT).show();
-        // TODO: Ouvrir la fiche détaillée de la photo
+        PhotoRegistry.set(photo);
+        Navigation.findNavController(requireView())
+                .navigate(R.id.navigation_photo_detail);
     }
 
     @Override
     public void onLikeClick(Photo photo, int position) {
+        if (SessionManager.get().isAnonymous()) {
+            Toast.makeText(requireContext(),
+                    "Connectez-vous pour liker une photo",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
         photo.setLiked(!photo.isLiked());
-        photoAdapter.notifyItemChanged(position);
+        if (photo.isLiked()) UserRepository.get().likePhoto(photo);
+        else UserRepository.get().unlikePhoto(photo);
+        photoAdapter1.notifyItemChanged(position);
+        photoAdapter2.notifyItemChanged(position);
     }
-
-    // --- PathAdapter callbacks ---
 
     @Override
     public void onPathClick(TravelPath path) {
-        Toast.makeText(requireContext(),
-                path.getTitle() + " - " + path.getCity(),
-                Toast.LENGTH_SHORT).show();
-        // TODO: Ouvrir la fiche détaillée du parcours
+        Toast.makeText(requireContext(), path.getTitle(), Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onLikeClick(TravelPath path, int position) {
+        if (SessionManager.get().isAnonymous()) {
+            Toast.makeText(requireContext(),
+                    "Connectez-vous pour liker un parcours",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
         path.setLiked(!path.isLiked());
-        pathAdapter.notifyItemChanged(position);
+        if (path.isLiked()) UserRepository.get().likePath(path);
+        else UserRepository.get().unlikePath(path);
+        pathAdapter1.notifyItemChanged(position);
+        pathAdapter2.notifyItemChanged(position);
     }
 }
