@@ -1,9 +1,15 @@
 package com.example.traveling.ui.create;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,13 +28,24 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import android.util.Log;
 
 public class CreatePathFragment extends Fragment {
 
     private TextInputEditText etTitle;
-    private TextInputEditText etCity;
+    private AutoCompleteTextView etCity;
     private TextInputEditText etDescription;
     private ChipGroup chipGroupDuration;
     private ChipGroup chipGroupBudget;
@@ -37,6 +54,10 @@ public class CreatePathFragment extends Fragment {
     private SwitchMaterial switchPublic;
 
     private final List<String> steps = new ArrayList<>();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private ArrayAdapter<String> cityAdapter;
+    private Runnable pendingSearch;
 
     @Nullable
     @Override
@@ -58,12 +79,229 @@ public class CreatePathFragment extends Fragment {
         stepsContainer = view.findViewById(R.id.steps_container);
         switchPublic = view.findViewById(R.id.switch_public);
 
+        setupCityAutocomplete();
+
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
                 Navigation.findNavController(v).navigateUp());
 
         view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
 
         view.findViewById(R.id.btn_add_step).setOnClickListener(v -> showAddStepDialog());
+
+        view.findViewById(R.id.btn_generate).setOnClickListener(v -> generatePath());
+    }
+
+    private void setupCityAutocomplete() {
+        cityAdapter = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_dropdown_item_1line, new ArrayList<>());
+        etCity.setAdapter(cityAdapter);
+
+        etCity.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (pendingSearch != null) {
+                    mainHandler.removeCallbacks(pendingSearch);
+                }
+                String query = s.toString().trim();
+                if (query.length() < 2) return;
+
+                pendingSearch = () -> searchCities(query);
+                mainHandler.postDelayed(pendingSearch, 300);
+            }
+        });
+    }
+
+    private void searchCities(String query) {
+        executor.execute(() -> {
+            try {
+                String encoded = URLEncoder.encode(query, "UTF-8");
+                String urlStr = "https://nominatim.openstreetmap.org/search?q=" + encoded
+                        + "&format=json&addressdetails=1&limit=5"
+                        + "&featuretype=city&accept-language=fr";
+
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line);
+                }
+                reader.close();
+
+                JSONArray results = new JSONArray(sb.toString());
+                List<String> cities = new ArrayList<>();
+
+                for (int i = 0; i < results.length(); i++) {
+                    JSONObject item = results.getJSONObject(i);
+                    String displayName = item.getString("display_name");
+                    String[] parts = displayName.split(",");
+                    String cityName = parts[0].trim();
+                    if (parts.length > 1) {
+                        String country = parts[parts.length - 1].trim();
+                        cityName = cityName + ", " + country;
+                    }
+                    if (!cities.contains(cityName)) {
+                        cities.add(cityName);
+                    }
+                }
+
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    cityAdapter.clear();
+                    cityAdapter.addAll(cities);
+                    cityAdapter.notifyDataSetChanged();
+                    if (!cities.isEmpty() && etCity.hasFocus()) {
+                        etCity.showDropDown();
+                    }
+                });
+
+            } catch (Exception e) {
+                // Silently ignore network errors
+            }
+        });
+    }
+
+    private void generatePath() {
+        String city = etCity.getText() != null ? etCity.getText().toString().trim() : "";
+        if (city.isEmpty()) {
+            etCity.setError("Entrez une ville d'abord");
+            etCity.requestFocus();
+            return;
+        }
+
+        View btnGenerate = requireView().findViewById(R.id.btn_generate);
+        btnGenerate.setEnabled(false);
+        Toast.makeText(requireContext(), "Génération en cours...", Toast.LENGTH_SHORT).show();
+
+        executor.execute(() -> {
+            try {
+                String encoded = URLEncoder.encode(city, "UTF-8");
+                String urlStr = "https://nominatim.openstreetmap.org/search?q=" + encoded
+                        + "&format=json&limit=1";
+
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+
+                JSONArray cityResults = new JSONArray(sb.toString());
+                if (cityResults.length() == 0) {
+                    mainHandler.post(() -> {
+                        if (!isAdded()) return;
+                        btnGenerate.setEnabled(true);
+                        Toast.makeText(requireContext(), "Ville introuvable", Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+
+                JSONObject cityObj = cityResults.getJSONObject(0);
+                String lat = cityObj.getString("lat");
+                String lon = cityObj.getString("lon");
+
+                String apiKey = "5ae2e3f221c38a28845f05b64ceacf3f82755ce118bd16981c7984e8";
+                String poiUrl = "https://api.opentripmap.com/0.1/en/places/radius"
+                        + "?radius=10000"
+                        + "&lon=" + lon
+                        + "&lat=" + lat
+                        + "&kinds=interesting_places"
+                        + "&limit=10"
+                        + "&format=json"
+                        + "&apikey=" + apiKey;
+
+                URL poiUrlObj = new URL(poiUrl);
+                HttpURLConnection poiConn = (HttpURLConnection) poiUrlObj.openConnection();
+                poiConn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                poiConn.setConnectTimeout(10000);
+                poiConn.setReadTimeout(10000);
+
+                int responseCode = poiConn.getResponseCode();
+                Log.d("CreatePath", "OpenTripMap response code: " + responseCode);
+                Log.d("CreatePath", "OpenTripMap URL: " + poiUrl);
+
+                if (responseCode != 200) {
+                    BufferedReader errorReader = new BufferedReader(
+                            new InputStreamReader(poiConn.getErrorStream()));
+                    StringBuilder errorSb = new StringBuilder();
+                    while ((line = errorReader.readLine()) != null) errorSb.append(line);
+                    errorReader.close();
+                    Log.e("CreatePath", "OpenTripMap error: " + errorSb.toString());
+                    mainHandler.post(() -> {
+                        if (!isAdded()) return;
+                        btnGenerate.setEnabled(true);
+                        Toast.makeText(requireContext(),
+                                "Erreur API: code " + responseCode, Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+
+                BufferedReader poiReader = new BufferedReader(
+                        new InputStreamReader(poiConn.getInputStream()));
+                StringBuilder poiSb = new StringBuilder();
+                while ((line = poiReader.readLine()) != null) poiSb.append(line);
+                poiReader.close();
+
+                JSONArray poiResults = new JSONArray(poiSb.toString());
+                List<String> generatedSteps = new ArrayList<>();
+
+                for (int i = 0; i < poiResults.length(); i++) {
+                    JSONObject poi = poiResults.getJSONObject(i);
+                    if (!poi.has("name") || poi.getString("name").isEmpty()) continue;
+                    String stepName = poi.getString("name");
+                    if (!generatedSteps.contains(stepName)) {
+                        generatedSteps.add(stepName);
+                    }
+                }
+
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    btnGenerate.setEnabled(true);
+
+                    if (generatedSteps.isEmpty()) {
+                        Toast.makeText(requireContext(),
+                                "Aucun lieu trouvé pour cette ville", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    steps.clear();
+                    stepsContainer.removeAllViews();
+                    for (String step : generatedSteps) {
+                        steps.add(step);
+                        addStepView(step, steps.size());
+                    }
+                    Toast.makeText(requireContext(),
+                            generatedSteps.size() + " étapes générées", Toast.LENGTH_SHORT).show();
+                });
+
+            } catch (Exception e) {
+                Log.e("CreatePath", "Generate error", e);
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    btnGenerate.setEnabled(true);
+                    Toast.makeText(requireContext(),
+                            "Erreur: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
 
     private void showAddStepDialog() {
@@ -156,5 +394,14 @@ public class CreatePathFragment extends Fragment {
             return ((com.google.android.material.chip.Chip) chip).getText().toString();
         }
         return "";
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (pendingSearch != null) {
+            mainHandler.removeCallbacks(pendingSearch);
+        }
+        executor.shutdownNow();
     }
 }

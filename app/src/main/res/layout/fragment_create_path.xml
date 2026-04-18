@@ -75,21 +75,23 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Ville -->
+            <!-- Ville (autocomplétion via Nominatim) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:hint="Ville *"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                app:startIconDrawable="@android:drawable/ic_menu_mylocation">
+                app:startIconDrawable="@android:drawable/ic_menu_mylocation"
+                app:endIconMode="dropdown_menu">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <AutoCompleteTextView
                     android:id="@+id/et_city"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="textCapWords"
-                    android:imeOptions="actionNext" />
+                    android:imeOptions="actionNext"
+                    android:completionThreshold="2" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -170,7 +172,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Budget"
+                android:text="Quels types d'activités vous intéressent"
                 android:textSize="14sp"
                 android:textColor="@android:color/darker_gray"
                 android:layout_marginBottom="8dp" />
@@ -187,21 +189,21 @@
                     android:id="@+id/chip_budget_low"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="€ Économique"
+                    android:text="Culture"
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_budget_mid"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="€€ Équilibré"
+                    android:text="Restauration"
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_budget_high"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="€€€ Confort"
+                    android:text="Loisir"
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
             </com.google.android.material.chip.ChipGroup>
@@ -302,6 +304,19 @@
                     android:checked="true" />
 
             </LinearLayout>
+
+            <!-- Bouton Générer parcours -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_generate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Générer parcours"
+                android:textSize="16sp"
+                android:padding="12dp"
+                app:icon="@android:drawable/ic_menu_compass"
+                app:iconGravity="textStart"
+                app:cornerRadius="12dp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
         </LinearLayout>
 
