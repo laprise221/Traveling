@@ -14,7 +14,11 @@ import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.util.Log;
+
 import com.example.traveling.R;
+import com.example.traveling.data.PathRegistry;
+import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.data.SampleData;
 import com.example.traveling.data.UserRepository;
@@ -24,6 +28,9 @@ import com.example.traveling.model.TravelPath;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class ExploreFragment extends Fragment
         implements PhotoCardAdapter.Listener, PathCardAdapter.Listener {
@@ -62,8 +69,8 @@ public class ExploreFragment extends Fragment
 
         photoAdapter1.setPhotos(SampleData.getSamplePhotos());
         photoAdapter2.setPhotos(SampleData.getSamplePhotos());
-        pathAdapter1.setPaths(SampleData.getSamplePaths());
-        pathAdapter2.setPaths(SampleData.getSamplePaths());
+
+        loadPathsFromFirestore();
 
         // Onglets
         tabLayout.addTab(tabLayout.newTab().setText("Photos"));
@@ -97,6 +104,29 @@ public class ExploreFragment extends Fragment
             Toast.makeText(requireContext(), "Planifier un parcours (TravelPath)",
                     Toast.LENGTH_SHORT).show();
         });
+    }
+
+    private void loadPathsFromFirestore() {
+        List<TravelPath> samplePaths = SampleData.getSamplePaths();
+        pathAdapter1.setPaths(samplePaths);
+        pathAdapter2.setPaths(samplePaths);
+
+        PathRepository.get().getPublicPaths()
+                .addOnSuccessListener(querySnapshot -> {
+                    if (!isAdded()) return;
+                    Log.d("Explore", "Firestore: " + querySnapshot.size() + " parcours trouvés");
+                    List<TravelPath> firestorePaths = querySnapshot.toObjects(TravelPath.class);
+                    for (int i = 0; i < querySnapshot.size(); i++) {
+                        firestorePaths.get(i).setId(querySnapshot.getDocuments().get(i).getId());
+                    }
+                    List<TravelPath> allPaths = new ArrayList<>(samplePaths);
+                    allPaths.addAll(0, firestorePaths);
+                    pathAdapter1.setPaths(allPaths);
+                    pathAdapter2.setPaths(allPaths);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("Explore", "Erreur chargement Firestore", e);
+                });
     }
 
     private void updateContent() {
@@ -133,7 +163,9 @@ public class ExploreFragment extends Fragment
 
     @Override
     public void onPathClick(TravelPath path) {
-        Toast.makeText(requireContext(), path.getTitle(), Toast.LENGTH_SHORT).show();
+        PathRegistry.set(path);
+        Navigation.findNavController(requireView())
+                .navigate(R.id.navigation_path_detail);
     }
 
     @Override

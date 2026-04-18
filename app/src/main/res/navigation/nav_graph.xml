@@ -92,6 +92,12 @@
         tools:layout="@layout/fragment_groups" />
 
     <fragment
+        android:id="@+id/navigation_path_detail"
+        android:name="com.example.traveling.ui.detail.PathDetailFragment"
+        android:label="Détail parcours"
+        tools:layout="@layout/fragment_path_detail" />
+
+    <fragment
         android:id="@+id/navigation_login"
         android:name="com.example.traveling.ui.auth.LoginFragment"
         android:label="Connexion"

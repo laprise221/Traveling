@@ -21,7 +21,9 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.UserRepository;
+import com.example.traveling.model.PathStep;
 import com.example.traveling.model.TravelPath;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -66,7 +68,7 @@ public class CreatePathFragment extends Fragment {
     private LinearLayout stepsContainer;
     private SwitchMaterial switchPublic;
 
-    private final List<String> steps = new ArrayList<>();
+    private final List<PathStep> steps = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private ArrayAdapter<String> cityAdapter;
@@ -219,7 +221,7 @@ public class CreatePathFragment extends Fragment {
         boolean sensiblePluie = cbPluie.isChecked();
 
         // Calculer les paramètres dérivés
-        int radius = getRadiusForEffort(effort);
+        int radius = getRadiusForEffort(effort, dureeMax);
         int maxSteps = getMaxSteps(dureeMax, effort);
         String kinds = mapActivitesToKinds(activites);
 
@@ -282,41 +284,59 @@ public class CreatePathFragment extends Fragment {
                 double temperature = meteoData.getDouble("temperature");
                 int weatherCode = meteoData.getInt("weathercode");
 
-                // ---- ÉTAPE 3 : Récupérer les POI (OpenTripMap) ----
+                // ---- ÉTAPE 3 : Récupérer les POI (OpenTripMap) en quadrillant la zone ----
                 String apiKey = "5ae2e3f221c38a28845f05b64ceacf3f82755ce118bd16981c7984e8";
-                String poiUrl = "https://api.opentripmap.com/0.1/en/places/radius"
-                        + "?radius=" + radius           // adapté à l'effort
-                        + "&lon=" + lon
-                        + "&lat=" + lat
-                        + "&kinds=" + kinds              // adapté aux activités choisies
-                        + "&limit=" + (maxSteps * 3)     // prendre plus pour filtrer ensuite
-                        + "&format=json"
-                        + "&apikey=" + apiKey;
+                double centerLat = Double.parseDouble(lat);
+                double centerLon = Double.parseDouble(lon);
 
-                URL poiUrlObj = new URL(poiUrl);
-                HttpURLConnection poiConn = (HttpURLConnection) poiUrlObj.openConnection();
-                poiConn.setRequestProperty("User-Agent", "TravelingApp/1.0");
-                poiConn.setConnectTimeout(10000);
-                poiConn.setReadTimeout(10000);
+                double offsetDeg = radius / 111000.0;
+                double[][] searchPoints = {
+                        {centerLat, centerLon},
+                        {centerLat + offsetDeg, centerLon},
+                        {centerLat - offsetDeg, centerLon},
+                        {centerLat, centerLon + offsetDeg},
+                        {centerLat, centerLon - offsetDeg},
+                        {centerLat + offsetDeg / 2, centerLon + offsetDeg / 2},
+                        {centerLat + offsetDeg / 2, centerLon - offsetDeg / 2},
+                        {centerLat - offsetDeg / 2, centerLon + offsetDeg / 2},
+                        {centerLat - offsetDeg / 2, centerLon - offsetDeg / 2},
+                };
 
-                int responseCode = poiConn.getResponseCode();
-                if (responseCode != 200) {
-                    mainHandler.post(() -> {
-                        if (!isAdded()) return;
-                        btnGenerate.setEnabled(true);
-                        Toast.makeText(requireContext(),
-                                "Erreur API: code " + responseCode, Toast.LENGTH_SHORT).show();
-                    });
-                    return;
+                int subRadius = radius / 3;
+                JSONArray poiResults = new JSONArray();
+
+                for (double[] pt : searchPoints) {
+                    try {
+                        String poiUrl = "https://api.opentripmap.com/0.1/en/places/radius"
+                                + "?radius=" + subRadius
+                                + "&lon=" + pt[1]
+                                + "&lat=" + pt[0]
+                                + "&kinds=" + kinds
+                                + "&limit=20"
+                                + "&format=json"
+                                + "&apikey=" + apiKey;
+
+                        URL poiUrlObj = new URL(poiUrl);
+                        HttpURLConnection poiConn = (HttpURLConnection) poiUrlObj.openConnection();
+                        poiConn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                        poiConn.setConnectTimeout(10000);
+                        poiConn.setReadTimeout(10000);
+
+                        if (poiConn.getResponseCode() == 200) {
+                            BufferedReader poiReader = new BufferedReader(
+                                    new InputStreamReader(poiConn.getInputStream()));
+                            StringBuilder poiSb = new StringBuilder();
+                            while ((line = poiReader.readLine()) != null) poiSb.append(line);
+                            poiReader.close();
+
+                            JSONArray partial = new JSONArray(poiSb.toString());
+                            for (int i = 0; i < partial.length(); i++) {
+                                poiResults.put(partial.getJSONObject(i));
+                            }
+                        }
+                    } catch (Exception ignored) {}
                 }
-
-                BufferedReader poiReader = new BufferedReader(
-                        new InputStreamReader(poiConn.getInputStream()));
-                StringBuilder poiSb = new StringBuilder();
-                while ((line = poiReader.readLine()) != null) poiSb.append(line);
-                poiReader.close();
-
-                JSONArray poiResults = new JSONArray(poiSb.toString());
+                Log.d("CreatePath", "Total POI récupérés: " + poiResults.length());
 
                 // ---- ÉTAPE 4 : Filtrer selon météo et budget ----
                 List<JSONObject> filteredPOIs = filterPOIs(
@@ -324,16 +344,66 @@ public class CreatePathFragment extends Fragment {
                         sensibleChaleur, sensiblePluie, budget
                 );
 
-                // ---- ÉTAPE 5 : Limiter au nombre d'étapes selon la durée ----
-                List<String> generatedSteps = new ArrayList<>();
-                int count = 0;
-                for (JSONObject poi : filteredPOIs) {
-                    if (count >= maxSteps) break;
-                    String stepName = poi.getString("name");
-                    if (!generatedSteps.contains(stepName)) {
-                        generatedSteps.add(stepName);
-                        count++;
+                // ---- ÉTAPE 5 : Sélectionner les étapes les plus éloignées entre elles ----
+                Log.d("CreatePath", "Filtered POIs: " + filteredPOIs.size()
+                        + ", radius: " + radius + "m, maxSteps: " + maxSteps);
+
+                List<PathStep> generatedSteps = new ArrayList<>();
+
+                // Ajouter le POI le mieux noté comme point de départ
+                for (int idx = 0; idx < filteredPOIs.size(); idx++) {
+                    JSONObject first = filteredPOIs.get(idx);
+                    if (!first.has("point") || !first.has("name") || first.getString("name").isEmpty())
+                        continue;
+                    JSONObject fp = first.getJSONObject("point");
+                    generatedSteps.add(new PathStep(first.getString("name"), "",
+                            fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null));
+                    filteredPOIs.remove(idx);
+                    break;
+                }
+
+                // Ajouter à chaque fois le POI le plus éloigné de tous ceux déjà sélectionnés
+                while (generatedSteps.size() < maxSteps && !filteredPOIs.isEmpty()) {
+                    double bestMinDist = -1;
+                    int bestIdx = -1;
+                    double bestLat = 0, bestLon = 0;
+                    String bestName = "";
+
+                    for (int i = 0; i < filteredPOIs.size(); i++) {
+                        JSONObject poi = filteredPOIs.get(i);
+                        if (!poi.has("point") || !poi.has("name") || poi.getString("name").isEmpty())
+                            continue;
+                        JSONObject pt = poi.getJSONObject("point");
+                        double pLat = pt.optDouble("lat", 0);
+                        double pLon = pt.optDouble("lon", 0);
+                        String pName = poi.getString("name");
+
+                        boolean sameName = false;
+                        for (PathStep s : generatedSteps) {
+                            if (s.getName().equals(pName)) { sameName = true; break; }
+                        }
+                        if (sameName) continue;
+
+                        double minDist = Double.MAX_VALUE;
+                        for (PathStep s : generatedSteps) {
+                            double d = distanceKm(s.getLatitude(), s.getLongitude(), pLat, pLon);
+                            if (d < minDist) minDist = d;
+                        }
+
+                        if (minDist > bestMinDist) {
+                            bestMinDist = minDist;
+                            bestIdx = i;
+                            bestLat = pLat;
+                            bestLon = pLon;
+                            bestName = pName;
+                        }
                     }
+
+                    if (bestIdx == -1) break;
+
+                    Log.d("CreatePath", "AJOUTÉ: " + bestName + " (dist=" + String.format("%.3f", bestMinDist) + "km)");
+                    generatedSteps.add(new PathStep(bestName, "", bestLat, bestLon, null, null));
+                    filteredPOIs.remove(bestIdx);
                 }
 
                 // ---- ÉTAPE 6 : Construire le résumé ----
@@ -367,7 +437,7 @@ public class CreatePathFragment extends Fragment {
                     // Afficher les étapes
                     steps.clear();
                     stepsContainer.removeAllViews();
-                    for (String step : generatedSteps) {
+                    for (PathStep step : generatedSteps) {
                         steps.add(step);
                         addStepView(step, steps.size());
                     }
@@ -402,15 +472,16 @@ public class CreatePathFragment extends Fragment {
                 .setPositiveButton("Ajouter", (dialog, which) -> {
                     String stepName = input.getText() != null ? input.getText().toString().trim() : "";
                     if (!stepName.isEmpty()) {
-                        steps.add(stepName);
-                        addStepView(stepName, steps.size());
+                        PathStep step = new PathStep(stepName, "", 0, 0, null, null);
+                        steps.add(step);
+                        addStepView(step, steps.size());
                     }
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
     }
 
-    private void addStepView(String stepName, int index) {
+    private void addStepView(PathStep step, int index) {
         View stepView = LayoutInflater.from(requireContext())
                 .inflate(R.layout.item_step, stepsContainer, false);
 
@@ -418,10 +489,10 @@ public class CreatePathFragment extends Fragment {
         TextView tvStepName = stepView.findViewById(R.id.tv_step_name);
 
         tvStepNumber.setText(String.valueOf(index));
-        tvStepName.setText(stepName);
+        tvStepName.setText(step.getName());
 
         stepView.findViewById(R.id.btn_remove_step).setOnClickListener(v -> {
-            steps.remove(stepName);
+            steps.remove(step);
             stepsContainer.removeView(stepView);
             refreshStepNumbers();
         });
@@ -457,17 +528,35 @@ public class CreatePathFragment extends Fragment {
         String difficulty = getSelectedChipText(chipGroupDifficulty);
         boolean isPublic = switchPublic.isChecked();
 
-        String id = "path_" + System.currentTimeMillis();
-        TravelPath path = new TravelPath(id, title, city, description,
+        TravelPath path = new TravelPath(null, title, city, description,
                 "Moi", 0, 0,
                 duration,
                 budgetStr,
                 difficulty.isEmpty() ? "-" : difficulty,
                 "équilibré", steps.size(), 0, R.drawable.sample_path_1);
-        UserRepository.get().addPath(path);
+        path.setPublic(isPublic);
+        path.setSteps(new ArrayList<>(steps));
 
-        Toast.makeText(requireContext(), "Parcours publié !", Toast.LENGTH_SHORT).show();
-        Navigation.findNavController(requireView()).navigateUp();
+        View btnPublish = requireView().findViewById(R.id.btn_publish);
+        btnPublish.setEnabled(false);
+
+        Log.d("CreatePath", "Saving path to Firestore...");
+        PathRepository.get().savePath(path)
+                .addOnSuccessListener(docRef -> {
+                    Log.d("CreatePath", "Path saved: " + docRef.getId());
+                    if (!isAdded()) return;
+                    path.setId(docRef.getId());
+                    UserRepository.get().addPath(path);
+                    Toast.makeText(requireContext(), "Parcours publié !", Toast.LENGTH_SHORT).show();
+                    Navigation.findNavController(requireView()).navigateUp();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("CreatePath", "Save failed", e);
+                    if (!isAdded()) return;
+                    btnPublish.setEnabled(true);
+                    Toast.makeText(requireContext(),
+                            "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
     }
 
     private List<String> getSelectedActivities() {
@@ -555,13 +644,29 @@ public class CreatePathFragment extends Fragment {
         return Math.max(2, (dureeHeures * 60) / minutesParEtape);
     }
 
-    private int getRadiusForEffort(String effort) {
+    private int getRadiusForEffort(String effort, int dureeHeures) {
+        int baseRadius;
         switch (effort.toLowerCase()) {
-            case "facile":    return 3000;
-            case "modéré":    return 7000;
-            case "difficile": return 15000;
-            default:          return 5000;
+            case "facile":    baseRadius = 2000; break;
+            case "difficile": baseRadius = 5000; break;
+            default:          baseRadius = 3000; break;
         }
+        return Math.min(25000, baseRadius * dureeHeures);
+    }
+
+    private double getMinDistanceBetweenSteps(int radiusMeters) {
+        double radiusKm = radiusMeters / 1000.0;
+        return Math.max(0.1, radiusKm / 15.0);
+    }
+
+    private double distanceKm(double lat1, double lon1, double lat2, double lon2) {
+        double R = 6371;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     private String mapActivitesToKinds(List<String> activites) {
