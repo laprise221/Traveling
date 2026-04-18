@@ -18,9 +18,11 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.ActivePathRegistry;
 import com.example.traveling.data.PathRegistry;
 import com.example.traveling.model.PathStep;
 import com.example.traveling.model.TravelPath;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.chip.Chip;
 
@@ -92,6 +94,20 @@ public class PathDetailFragment extends Fragment {
         mapView = view.findViewById(R.id.map_path_detail);
         mapView.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK);
         mapView.setMultiTouchControls(true);
+
+        MaterialButton btnStart = view.findViewById(R.id.btn_start_path);
+        List<PathStep> startSteps = path.getSteps();
+        if (startSteps == null || startSteps.isEmpty()) {
+            btnStart.setEnabled(false);
+            btnStart.setText("Aucune étape à parcourir");
+        } else {
+            btnStart.setOnClickListener(v -> {
+                ActivePathRegistry.start(path);
+                Toast.makeText(requireContext(),
+                        "Parcours démarré ! Direction la carte.", Toast.LENGTH_SHORT).show();
+                Navigation.findNavController(v).navigate(R.id.navigation_map);
+            });
+        }
 
         LinearLayout stepsContainer = view.findViewById(R.id.steps_list_container);
 
