@@ -4,8 +4,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -16,9 +14,14 @@ import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.util.Log;
+
 import com.example.traveling.R;
-import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.PathRegistry;
+import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.PhotoRegistry;
+import com.example.traveling.data.SampleData;
+import com.example.traveling.data.UserRepository;
 import com.example.traveling.session.SessionManager;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
@@ -26,6 +29,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ExploreFragment extends Fragment
@@ -63,6 +67,11 @@ public class ExploreFragment extends Fragment
         pathAdapter1 = new PathCardAdapter(this);
         pathAdapter2 = new PathCardAdapter(this);
 
+        photoAdapter1.setPhotos(SampleData.getSamplePhotos());
+        photoAdapter2.setPhotos(SampleData.getSamplePhotos());
+
+        loadPathsFromFirestore();
+
         // Onglets
         tabLayout.addTab(tabLayout.newTab().setText("Photos"));
         tabLayout.addTab(tabLayout.newTab().setText("Parcours"));
@@ -75,10 +84,6 @@ public class ExploreFragment extends Fragment
             @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
         updateContent();
-
-        // Load data from Firestore
-        loadPhotosFromFirestore();
-        loadPathsFromFirestore();
 
         searchBar.setOnClickListener(v -> {
             NavOptions opts = new NavOptions.Builder()
@@ -101,40 +106,27 @@ public class ExploreFragment extends Fragment
         });
     }
 
-    private void loadPhotosFromFirestore() {
-        FirestoreRepository.get().loadPublicPhotos(photos -> {
-            if (!isAdded()) return;
-            photoAdapter1.setPhotos(photos);
-            photoAdapter2.setPhotos(photos);
-            // Check liked status for current user
-            FirestoreRepository.get().checkLikedPhotos(photos, () -> {
-                if (!isAdded()) return;
-                photoAdapter1.notifyDataSetChanged();
-                photoAdapter2.notifyDataSetChanged();
-            });
-        });
-    }
-
     private void loadPathsFromFirestore() {
-        FirestoreRepository.get().loadPublicPaths(paths -> {
-            if (!isAdded()) return;
-            pathAdapter1.setPaths(paths);
-            pathAdapter2.setPaths(paths);
-            // Check liked status
-            FirestoreRepository.get().checkLikedPaths(paths, () -> {
-                if (!isAdded()) return;
-                pathAdapter1.notifyDataSetChanged();
-                pathAdapter2.notifyDataSetChanged();
-            });
-        });
-    }
+        List<TravelPath> samplePaths = SampleData.getSamplePaths();
+        pathAdapter1.setPaths(samplePaths);
+        pathAdapter2.setPaths(samplePaths);
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        // Reload on return to refresh data
-        loadPhotosFromFirestore();
-        loadPathsFromFirestore();
+        PathRepository.get().getPublicPaths()
+                .addOnSuccessListener(querySnapshot -> {
+                    if (!isAdded()) return;
+                    Log.d("Explore", "Firestore: " + querySnapshot.size() + " parcours trouvés");
+                    List<TravelPath> firestorePaths = querySnapshot.toObjects(TravelPath.class);
+                    for (int i = 0; i < querySnapshot.size(); i++) {
+                        firestorePaths.get(i).setId(querySnapshot.getDocuments().get(i).getId());
+                    }
+                    List<TravelPath> allPaths = new ArrayList<>(samplePaths);
+                    allPaths.addAll(0, firestorePaths);
+                    pathAdapter1.setPaths(allPaths);
+                    pathAdapter2.setPaths(allPaths);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("Explore", "Erreur chargement Firestore", e);
+                });
     }
 
     private void updateContent() {
@@ -162,17 +154,18 @@ public class ExploreFragment extends Fragment
                     Toast.LENGTH_SHORT).show();
             return;
         }
-        boolean newLiked = !photo.isLiked();
-        photo.setLiked(newLiked);
+        photo.setLiked(!photo.isLiked());
+        if (photo.isLiked()) UserRepository.get().likePhoto(photo);
+        else UserRepository.get().unlikePhoto(photo);
         photoAdapter1.notifyItemChanged(position);
         photoAdapter2.notifyItemChanged(position);
-        // Persist to Firestore
-        FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
     }
 
     @Override
     public void onPathClick(TravelPath path) {
-        Toast.makeText(requireContext(), path.getTitle(), Toast.LENGTH_SHORT).show();
+        PathRegistry.set(path);
+        Navigation.findNavController(requireView())
+                .navigate(R.id.navigation_path_detail);
     }
 
     @Override
@@ -183,11 +176,10 @@ public class ExploreFragment extends Fragment
                     Toast.LENGTH_SHORT).show();
             return;
         }
-        boolean newLiked = !path.isLiked();
-        path.setLiked(newLiked);
+        path.setLiked(!path.isLiked());
+        if (path.isLiked()) UserRepository.get().likePath(path);
+        else UserRepository.get().unlikePath(path);
         pathAdapter1.notifyItemChanged(position);
         pathAdapter2.notifyItemChanged(position);
-        // Persist to Firestore
-        FirestoreRepository.get().toggleLikePath(path.getId(), newLiked, null);
     }
 }

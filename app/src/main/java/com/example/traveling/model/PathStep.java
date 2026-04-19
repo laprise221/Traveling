@@ -9,7 +9,6 @@ public class PathStep {
     private String duration;
     private String timeSlot;
 
-    /** No-arg constructor required by Firestore */
     public PathStep() {}
 
     public PathStep(String name, String description, double latitude, double longitude,

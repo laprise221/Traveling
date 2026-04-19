@@ -75,21 +75,23 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Ville -->
+            <!-- Ville (autocomplétion via Nominatim) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:hint="Ville *"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                app:startIconDrawable="@android:drawable/ic_menu_mylocation">
+                app:startIconDrawable="@android:drawable/ic_menu_mylocation"
+                app:endIconMode="dropdown_menu">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <AutoCompleteTextView
                     android:id="@+id/et_city"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="textCapWords"
-                    android:imeOptions="actionNext" />
+                    android:imeOptions="actionNext"
+                    android:completionThreshold="2" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -121,87 +123,106 @@
                 android:textColor="@android:color/darker_gray"
                 android:layout_marginBottom="8dp" />
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chip_group_duration"
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_duree"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:singleSelection="true"
-                app:selectionRequired="false">
+                android:valueFrom="0"
+                android:valueTo="12"
+                android:stepSize="1"
+                android:value="3"
+                app:trackColorActive="#6366F1"
+                app:thumbColor="#6366F1" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_1h"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="1h"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+            <TextView
+                android:id="@+id/tv_duree_value"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="3h"
+                android:textAlignment="center"
+                android:textSize="16sp"
+                android:textColor="#6366F1"
+                android:textStyle="bold"
+                android:paddingBottom="4dp"/>
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_2h"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="2h"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Budget maximum"
+                android:textSize="14sp"
+                android:paddingBottom="0dp" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_halfday"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Demi-journée"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_budget"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:valueFrom="0"
+                android:valueTo="300"
+                android:stepSize="10"
+                android:value="80"
+                app:trackColorActive="#6366F1"
+                app:thumbColor="#6366F1" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_day"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="1 journée"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_multiday"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Plusieurs jours"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
-
-            </com.google.android.material.chip.ChipGroup>
-
-            <!-- Budget -->
+            <TextView
+                android:id="@+id/tv_budget_value"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="80 €"
+                android:textAlignment="center"
+                android:textSize="16sp"
+                android:textColor="#6366F1"
+                android:textStyle="bold"
+                android:paddingBottom="4dp"/>
+            <!-- Type d'activité-->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Budget"
+                android:text="Quels types d'activités vous intéressent"
                 android:textSize="14sp"
                 android:textColor="@android:color/darker_gray"
                 android:layout_marginBottom="8dp" />
 
             <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chip_group_budget"
+                android:id="@+id/chip_group_activities"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:singleSelection="true"
+                app:singleSelection="false"
                 app:selectionRequired="false">
 
                 <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_budget_low"
+                    android:id="@+id/chip_culture"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="€ Économique"
+                    android:text="Culture"
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
                 <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_budget_mid"
+                    android:id="@+id/chip_restauration"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="€€ Équilibré"
+                    android:text="Restauration"
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
                 <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_budget_high"
+                    android:id="@+id/chip_loisirs"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="€€€ Confort"
+                    android:text="Loisirs"
+                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_nature"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Nature"
+                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_decouverte"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Découverte"
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
             </com.google.android.material.chip.ChipGroup>
@@ -245,6 +266,47 @@
                     style="@style/Widget.MaterialComponents.Chip.Filter" />
 
             </com.google.android.material.chip.ChipGroup>
+
+            <!-- Sensibilités météo -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sensibilités météo"
+                android:textSize="14sp"
+                android:textColor="@android:color/darker_gray"
+                android:layout_marginBottom="8dp" />
+
+            <CheckBox
+                android:id="@+id/cb_chaleur"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sensible à la chaleur" />
+
+            <CheckBox
+                android:id="@+id/cb_pluie"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sensible à la pluie"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Météo et résumé (affichés après génération) -->
+            <TextView
+                android:id="@+id/tv_meteo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tv_resume"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="@android:color/darker_gray"
+                android:visibility="gone"
+                android:layout_marginBottom="16dp" />
 
             <!-- Étapes -->
             <LinearLayout
@@ -302,6 +364,19 @@
                     android:checked="true" />
 
             </LinearLayout>
+
+            <!-- Bouton Générer parcours -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_generate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Générer parcours"
+                android:textSize="16sp"
+                android:padding="12dp"
+                app:icon="@android:drawable/ic_menu_compass"
+                app:iconGravity="textStart"
+                app:cornerRadius="12dp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
         </LinearLayout>
 
