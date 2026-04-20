@@ -221,7 +221,7 @@
                             android:id="@+id/tv_groups_count"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="4 groupes"
+                            android:text="0 groupe"
                             android:textColor="#CCFFFFFF"
                             android:textSize="11sp" />
                     </LinearLayout>

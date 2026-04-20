@@ -25,16 +25,28 @@
             android:layout_gravity="bottom"
             android:background="#80000000" />
 
-        <!-- Like top-left -->
+        <!-- Like (pouce) top-left -->
         <ImageButton
             android:id="@+id/card_like"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:layout_margin="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_favorite"
+            android:src="@drawable/ic_thumb_up"
             android:scaleType="centerInside"
             android:contentDescription="Like" />
+
+        <!-- Favori (cœur) top-right -->
+        <ImageButton
+            android:id="@+id/card_favorite"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_margin="8dp"
+            android:layout_gravity="top|end"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_favorite"
+            android:scaleType="centerInside"
+            android:contentDescription="Favori" />
 
         <!-- Titre + nb likes en bas -->
         <LinearLayout

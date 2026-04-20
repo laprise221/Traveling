@@ -1,7 +1,5 @@
 package com.example.traveling.ui.groups;
 
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
 import com.example.traveling.model.Group;
+import com.google.android.material.button.MaterialButton;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,14 +20,21 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.VH> {
 
     public interface Listener {
         void onGroupClick(Group group);
+        default void onJoinClick(Group group) {}
     }
 
     private List<Group> groups = new ArrayList<>();
     private List<Group> allGroups = new ArrayList<>();
     private final Listener listener;
+    private final boolean showJoinButton;
 
     public GroupAdapter(Listener listener) {
+        this(listener, false);
+    }
+
+    public GroupAdapter(Listener listener, boolean showJoinButton) {
         this.listener = listener;
+        this.showJoinButton = showJoinButton;
     }
 
     public void setGroups(List<Group> groups) {
@@ -63,10 +69,13 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH h, int position) {
         Group g = groups.get(position);
-        h.image.setImageResource(g.getImageResId());
+        if (g.getImageResId() != 0) h.image.setImageResource(g.getImageResId());
+        else h.image.setImageResource(android.R.drawable.ic_menu_manage);
         h.name.setText(g.getName());
-        h.lastMessage.setText(g.getLastMessage());
-        h.time.setText(g.getLastMessageTime());
+        String sub = g.getDescription() != null && !g.getDescription().isEmpty()
+                ? g.getDescription() : (g.getTheme() != null && !g.getTheme().isEmpty() ? g.getTheme() : "");
+        h.lastMessage.setText(sub);
+        h.time.setText(g.getMembersCount() > 0 ? g.getMembersCount() + " membre(s)" : "");
 
         if (g.getUnreadCount() > 0) {
             h.badge.setVisibility(View.VISIBLE);
@@ -74,6 +83,11 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.VH> {
         } else {
             h.badge.setVisibility(View.GONE);
         }
+
+        h.joinBtn.setVisibility(showJoinButton ? View.VISIBLE : View.GONE);
+        h.joinBtn.setOnClickListener(v -> {
+            if (listener != null) listener.onJoinClick(g);
+        });
 
         h.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onGroupClick(g);
@@ -88,6 +102,7 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.VH> {
     static class VH extends RecyclerView.ViewHolder {
         ImageView image;
         TextView name, lastMessage, time, badge;
+        MaterialButton joinBtn;
 
         VH(@NonNull View itemView) {
             super(itemView);
@@ -96,6 +111,7 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.VH> {
             lastMessage = itemView.findViewById(R.id.group_last_message);
             time = itemView.findViewById(R.id.group_time);
             badge = itemView.findViewById(R.id.group_unread_badge);
+            joinBtn = itemView.findViewById(R.id.btn_join_group_item);
         }
     }
 }

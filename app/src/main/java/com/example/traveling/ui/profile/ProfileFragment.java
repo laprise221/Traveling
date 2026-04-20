@@ -13,6 +13,12 @@ import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.GroupRepository;
+import com.example.traveling.data.NotificationRepository;
+import com.example.traveling.session.SessionManager;
+import com.google.android.material.badge.BadgeDrawable;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -21,7 +27,7 @@ public class ProfileFragment extends Fragment {
 
     private TextView profileAvatarInitials, profileName, profileEmail;
     private TextView statPhotosCount, statPathsCount;
-    private TextView tvPublicationsCount;
+    private TextView tvPublicationsCount, tvGroupsCount;
     private View layoutConnected, layoutAnonymous;
 
     @Nullable
@@ -43,6 +49,7 @@ public class ProfileFragment extends Fragment {
         statPhotosCount = view.findViewById(R.id.stat_photos_count);
         statPathsCount = view.findViewById(R.id.stat_paths_count);
         tvPublicationsCount = view.findViewById(R.id.tv_publications_count);
+        tvGroupsCount = view.findViewById(R.id.tv_groups_count);
 
         MaterialCardView cardPublications = view.findViewById(R.id.card_my_publications);
         MaterialCardView cardGroups = view.findViewById(R.id.card_my_groups);
@@ -56,6 +63,12 @@ public class ProfileFragment extends Fragment {
         view.findViewById(R.id.btn_register).setOnClickListener(v ->
                 Navigation.findNavController(v).navigate(R.id.action_profile_to_register));
 
+        MaterialButton btnNotifications = view.findViewById(R.id.btn_notifications);
+        if (btnNotifications != null) {
+            btnNotifications.setOnClickListener(v ->
+                    Navigation.findNavController(v).navigate(R.id.action_profile_to_notifications));
+        }
+
         view.findViewById(R.id.btn_logout).setOnClickListener(v -> {
             FirebaseAuth.getInstance().signOut();
             updateUI();
@@ -66,6 +79,36 @@ public class ProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateUI();
+        updateNotificationBadge();
+    }
+
+    private void updateNotificationBadge() {
+        if (SessionManager.get().isAnonymous()) return;
+        NotificationRepository.get().getUnreadCount(count -> {
+            if (!isAdded() || getActivity() == null) return;
+
+            // Badge on bottom nav Profile icon
+            BottomNavigationView nav = getActivity().findViewById(R.id.bottom_navigation);
+            if (nav != null) {
+                if (count > 0) {
+                    BadgeDrawable badge = nav.getOrCreateBadge(R.id.navigation_profile);
+                    badge.setVisible(true);
+                    badge.setNumber(count);
+                } else {
+                    nav.removeBadge(R.id.navigation_profile);
+                }
+            }
+
+            // Counter next to the Notifications button
+            MaterialButton btnNotifications = getView() != null
+                    ? getView().findViewById(R.id.btn_notifications) : null;
+            if (btnNotifications != null) {
+                String label = count > 0
+                        ? "Notifications  ·  " + count + " non lue" + (count > 1 ? "s" : "")
+                        : "Notifications";
+                btnNotifications.setText(label);
+            }
+        });
     }
 
     private void updateUI() {
@@ -96,21 +139,24 @@ public class ProfileFragment extends Fragment {
     }
 
     private void updatePublications(String uid) {
-        // Load photo count from Firestore
         FirestoreRepository.get().loadUserPhotos(uid, photos -> {
             if (!isAdded()) return;
             int photoCount = photos.size();
             statPhotosCount.setText(String.valueOf(photoCount));
 
-            // Load path count from Firestore
             FirestoreRepository.get().loadUserPaths(uid, paths -> {
                 if (!isAdded()) return;
                 int pathCount = paths.size();
                 statPathsCount.setText(String.valueOf(pathCount));
-
                 int total = photoCount + pathCount;
                 tvPublicationsCount.setText(total + " contenu" + (total > 1 ? "s" : ""));
             });
+        });
+
+        GroupRepository.get().loadUserGroups(groups -> {
+            if (!isAdded()) return;
+            int count = groups.size();
+            tvGroupsCount.setText(count + " groupe" + (count > 1 ? "s" : ""));
         });
     }
 

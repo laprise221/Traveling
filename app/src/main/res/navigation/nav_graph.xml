@@ -71,7 +71,16 @@
         <action
             android:id="@+id/action_profile_to_register"
             app:destination="@id/navigation_register" />
+        <action
+            android:id="@+id/action_profile_to_notifications"
+            app:destination="@id/navigation_notifications" />
     </fragment>
+
+    <fragment
+        android:id="@+id/navigation_notifications"
+        android:name="com.example.traveling.ui.notifications.NotificationsFragment"
+        android:label="Notifications"
+        tools:layout="@layout/fragment_notifications" />
 
     <fragment
         android:id="@+id/navigation_photo_detail"
@@ -89,7 +98,30 @@
         android:id="@+id/navigation_groups"
         android:name="com.example.traveling.ui.groups.GroupsFragment"
         android:label="Mes groupes"
-        tools:layout="@layout/fragment_groups" />
+        tools:layout="@layout/fragment_groups">
+        <action
+            android:id="@+id/action_groups_to_group_detail"
+            app:destination="@id/navigation_group_detail" />
+        <action
+            android:id="@+id/action_groups_to_group_search"
+            app:destination="@id/navigation_group_search" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_group_search"
+        android:name="com.example.traveling.ui.groups.GroupSearchFragment"
+        android:label="Rechercher des groupes"
+        tools:layout="@layout/fragment_group_search">
+        <action
+            android:id="@+id/action_group_search_to_group_detail"
+            app:destination="@id/navigation_group_detail" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_group_detail"
+        android:name="com.example.traveling.ui.groups.GroupDetailFragment"
+        android:label="Discussion groupe"
+        tools:layout="@layout/fragment_group_detail" />
 
     <fragment
         android:id="@+id/navigation_path_detail"

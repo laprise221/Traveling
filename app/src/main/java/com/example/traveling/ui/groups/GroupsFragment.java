@@ -6,22 +6,26 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.GroupRepository;
 import com.example.traveling.model.Group;
+import com.example.traveling.session.SessionManager;
 import com.google.android.material.button.MaterialButton;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
@@ -45,6 +49,7 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
         layoutEmpty = view.findViewById(R.id.layout_empty);
         EditText searchInput = view.findViewById(R.id.search_groups);
         MaterialButton btnCreate = view.findViewById(R.id.btn_create_group);
+        MaterialButton btnDiscover = view.findViewById(R.id.btn_discover_groups);
         MaterialButton btnJoin = view.findViewById(R.id.btn_join_group);
 
         adapter = new GroupAdapter(this);
@@ -52,10 +57,6 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
         recyclerView.addItemDecoration(
                 new DividerItemDecoration(requireContext(), DividerItemDecoration.VERTICAL));
         recyclerView.setAdapter(adapter);
-
-        List<Group> groups = getSampleGroups();
-        adapter.setGroups(groups);
-        updateEmptyState(groups.isEmpty());
 
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int i, int c, int a) {}
@@ -65,10 +66,46 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
             }
         });
 
-        btnCreate.setOnClickListener(v -> showCreateGroupDialog());
+        btnDiscover.setOnClickListener(v ->
+                Navigation.findNavController(v).navigate(R.id.action_groups_to_group_search));
+
+        btnCreate.setOnClickListener(v -> {
+            if (SessionManager.get().isAnonymous()) {
+                Toast.makeText(requireContext(), "Connectez-vous pour créer un groupe", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            showCreateGroupDialog();
+        });
+
         if (btnJoin != null) {
-            btnJoin.setOnClickListener(v -> showJoinGroupDialog());
+            btnJoin.setOnClickListener(v -> {
+                if (SessionManager.get().isAnonymous()) {
+                    Toast.makeText(requireContext(), "Connectez-vous pour rejoindre un groupe", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showJoinGroupDialog();
+            });
         }
+
+        loadGroups();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadGroups();
+    }
+
+    private void loadGroups() {
+        if (SessionManager.get().isAnonymous()) {
+            updateEmptyState(true);
+            return;
+        }
+        GroupRepository.get().loadUserGroups(groups -> {
+            if (!isAdded()) return;
+            adapter.setGroups(groups);
+            updateEmptyState(groups.isEmpty());
+        });
     }
 
     private void updateEmptyState(boolean empty) {
@@ -76,20 +113,58 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
         layoutEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
     }
 
+    private static final String[] THEMES = {"", "Musée", "Nature", "Plage", "Monument", "Rue", "Voyage", "Gastronomie", "Architecture", "Photographie"};
+    private static final String[] THEMES_LABELS = {"Aucun", "Musée", "Nature", "Plage", "Monument", "Rue", "Voyage", "Gastronomie", "Architecture", "Photographie"};
+
     private void showCreateGroupDialog() {
-        EditText input = new EditText(requireContext());
-        input.setHint("Nom du groupe");
-        input.setPadding(48, 32, 48, 16);
+        LinearLayout layout = new LinearLayout(requireContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(48, 32, 48, 16);
+
+        EditText etName = new EditText(requireContext());
+        etName.setHint("Nom du groupe");
+        layout.addView(etName);
+
+        EditText etDesc = new EditText(requireContext());
+        etDesc.setHint("Description (optionnel)");
+        layout.addView(etDesc);
+
+        android.widget.Spinner spinnerTheme = new android.widget.Spinner(requireContext());
+        android.widget.ArrayAdapter<String> themeAdapter = new android.widget.ArrayAdapter<>(
+                requireContext(), android.R.layout.simple_spinner_dropdown_item, THEMES_LABELS);
+        spinnerTheme.setAdapter(themeAdapter);
+        android.widget.TextView tvTheme = new android.widget.TextView(requireContext());
+        tvTheme.setText("Thème :");
+        tvTheme.setPadding(0, 16, 0, 4);
+        layout.addView(tvTheme);
+        layout.addView(spinnerTheme);
+
+        CheckBox cbPublic = new CheckBox(requireContext());
+        cbPublic.setText("Groupe public (visible par tous)");
+        cbPublic.setChecked(true);
+        layout.addView(cbPublic);
 
         new AlertDialog.Builder(requireContext())
                 .setTitle("Créer un groupe")
-                .setView(input)
+                .setView(layout)
                 .setPositiveButton("Créer", (d, w) -> {
-                    String name = input.getText().toString().trim();
-                    if (!name.isEmpty()) {
-                        Toast.makeText(requireContext(),
-                                "Groupe \"" + name + "\" créé", Toast.LENGTH_SHORT).show();
+                    String name = etName.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        Toast.makeText(requireContext(), "Nom requis", Toast.LENGTH_SHORT).show();
+                        return;
                     }
+                    String desc = etDesc.getText().toString().trim();
+                    String theme = THEMES[spinnerTheme.getSelectedItemPosition()];
+                    boolean isPublic = cbPublic.isChecked();
+                    GroupRepository.get().createGroup(name, desc, theme, isPublic,
+                            groupId -> {
+                                if (!isAdded()) return;
+                                Toast.makeText(requireContext(),
+                                        "Groupe \"" + name + "\" créé", Toast.LENGTH_SHORT).show();
+                                loadGroups();
+                            },
+                            e -> Toast.makeText(requireContext(),
+                                    "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show());
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
@@ -97,7 +172,7 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
 
     private void showJoinGroupDialog() {
         EditText input = new EditText(requireContext());
-        input.setHint("Code ou nom du groupe");
+        input.setHint("Nom du groupe public");
         input.setPadding(48, 32, 48, 16);
 
         new AlertDialog.Builder(requireContext())
@@ -105,10 +180,18 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
                 .setView(input)
                 .setPositiveButton("Rejoindre", (d, w) -> {
                     String name = input.getText().toString().trim();
-                    if (!name.isEmpty()) {
-                        Toast.makeText(requireContext(),
-                                "Demande envoyée à \"" + name + "\"", Toast.LENGTH_SHORT).show();
-                    }
+                    if (name.isEmpty()) return;
+                    GroupRepository.get().joinGroupByName(name, found -> {
+                        if (!isAdded()) return;
+                        if (found) {
+                            Toast.makeText(requireContext(),
+                                    "Vous avez rejoint \"" + name + "\"", Toast.LENGTH_SHORT).show();
+                            loadGroups();
+                        } else {
+                            Toast.makeText(requireContext(),
+                                    "Groupe public introuvable", Toast.LENGTH_SHORT).show();
+                        }
+                    });
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
@@ -116,24 +199,7 @@ public class GroupsFragment extends Fragment implements GroupAdapter.Listener {
 
     @Override
     public void onGroupClick(Group group) {
-        Toast.makeText(requireContext(), group.getName(), Toast.LENGTH_SHORT).show();
-        // TODO: ouvrir le détail du groupe
-    }
-
-    private List<Group> getSampleGroups() {
-        List<Group> list = new ArrayList<>();
-        list.add(new Group("g1", "Voyageurs Paris",
-                "Marie : Nouvelle photo du Louvre !",
-                "14:32", 8, 3, R.drawable.sample_photo_1));
-        list.add(new Group("g2", "Asie & Culture",
-                "Thomas : On se retrouve à Kyoto ?",
-                "11:05", 15, 1, R.drawable.sample_photo_3));
-        list.add(new Group("g3", "Road Trip Maroc",
-                "Vous : Super séjour, merci !",
-                "Hier", 5, 0, R.drawable.sample_photo_4));
-        list.add(new Group("g4", "Amis explorateurs",
-                "Ahmed : Regardez ce coucher de soleil",
-                "Lun.", 4, 0, R.drawable.sample_photo_2));
-        return list;
+        GroupRegistry.set(group);
+        Navigation.findNavController(requireView()).navigate(R.id.action_groups_to_group_detail);
     }
 }

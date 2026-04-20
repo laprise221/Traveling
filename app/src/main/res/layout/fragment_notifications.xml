@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@android:color/white">
+
+    <!-- Toolbar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="?attr/colorPrimary">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            android:tint="@android:color/white"
+            android:contentDescription="Retour" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Notifications"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_mark_all_read"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tout lire"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            android:backgroundTint="@android:color/white"
+            android:textColor="?attr/colorPrimary"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            app:strokeColor="@android:color/white"
+            xmlns:app="http://schemas.android.com/apk/res-auto"
+            app:cornerRadius="16dp" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_notifications"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/tv_empty_notifications"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="Aucune notification"
+        android:textColor="#999999"
+        android:textSize="15sp"
+        android:visibility="gone" />
+
+</LinearLayout>

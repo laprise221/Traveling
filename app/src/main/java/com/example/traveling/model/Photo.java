@@ -32,6 +32,7 @@ public class Photo {
 
     // Local-only fields (not stored in Firestore)
     private boolean liked;
+    private boolean favorited;
     private int imageResId;
     private Uri imageUri;
     private Bitmap imageBitmap;
@@ -122,4 +123,8 @@ public class Photo {
     public void setLikedSilent(boolean liked) {
         this.liked = liked;
     }
+
+    @Exclude public boolean isFavorited() { return favorited; }
+    public void setFavoritedSilent(boolean favorited) { this.favorited = favorited; }
+    public void setFavorited(boolean favorited) { this.favorited = favorited; }
 }

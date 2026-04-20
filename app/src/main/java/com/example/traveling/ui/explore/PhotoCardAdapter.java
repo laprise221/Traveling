@@ -21,6 +21,7 @@ public class PhotoCardAdapter extends RecyclerView.Adapter<PhotoCardAdapter.VH> 
     public interface Listener {
         void onPhotoClick(Photo photo);
         void onLikeClick(Photo photo, int position);
+        void onFavoriteClick(Photo photo, int position);
     }
 
     private List<Photo> photos = new ArrayList<>();
@@ -50,11 +51,16 @@ public class PhotoCardAdapter extends RecyclerView.Adapter<PhotoCardAdapter.VH> 
         else if (p.getImageUri() != null) h.image.setImageURI(p.getImageUri());
         else if (p.getImageResId() != 0) h.image.setImageResource(p.getImageResId());
         h.title.setText(p.getTitle());
-        h.likes.setText(p.getLikeCount() + " \u2665");
+        h.likes.setText(p.getLikeCount() + " \uD83D\uDC4D");
         h.like.setImageResource(p.isLiked()
+                ? R.drawable.ic_thumb_up_filled : R.drawable.ic_thumb_up);
+        h.favorite.setImageResource(p.isFavorited()
                 ? R.drawable.ic_favorite_filled : R.drawable.ic_favorite);
         h.like.setOnClickListener(v -> {
             if (listener != null) listener.onLikeClick(p, h.getBindingAdapterPosition());
+        });
+        h.favorite.setOnClickListener(v -> {
+            if (listener != null) listener.onFavoriteClick(p, h.getBindingAdapterPosition());
         });
         h.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onPhotoClick(p);
@@ -69,7 +75,7 @@ public class PhotoCardAdapter extends RecyclerView.Adapter<PhotoCardAdapter.VH> 
     static class VH extends RecyclerView.ViewHolder {
         ImageView image;
         TextView title, likes;
-        ImageButton like;
+        ImageButton like, favorite;
 
         VH(@NonNull View itemView) {
             super(itemView);
@@ -77,6 +83,7 @@ public class PhotoCardAdapter extends RecyclerView.Adapter<PhotoCardAdapter.VH> 
             title = itemView.findViewById(R.id.card_title);
             likes = itemView.findViewById(R.id.card_likes);
             like = itemView.findViewById(R.id.card_like);
+            favorite = itemView.findViewById(R.id.card_favorite);
         }
     }
 }

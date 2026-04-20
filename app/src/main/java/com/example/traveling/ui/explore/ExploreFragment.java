@@ -1,6 +1,7 @@
 package com.example.traveling.ui.explore;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,17 +15,16 @@ import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.util.Log;
-
 import com.example.traveling.R;
+import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.NotificationRepository;
 import com.example.traveling.data.PathRegistry;
-import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.PhotoRegistry;
-import com.example.traveling.data.SampleData;
-import com.example.traveling.data.UserRepository;
-import com.example.traveling.session.SessionManager;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
+import com.example.traveling.session.SessionManager;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
@@ -39,6 +39,9 @@ public class ExploreFragment extends Fragment
     private PathCardAdapter pathAdapter1, pathAdapter2;
     private RecyclerView recycler1, recycler2;
     private boolean showingPhotos = true;
+
+    private List<Photo> loadedPhotos = new ArrayList<>();
+    private List<TravelPath> loadedPaths = new ArrayList<>();
 
     @Nullable
     @Override
@@ -67,12 +70,6 @@ public class ExploreFragment extends Fragment
         pathAdapter1 = new PathCardAdapter(this);
         pathAdapter2 = new PathCardAdapter(this);
 
-        photoAdapter1.setPhotos(SampleData.getSamplePhotos());
-        photoAdapter2.setPhotos(SampleData.getSamplePhotos());
-
-        loadPathsFromFirestore();
-
-        // Onglets
         tabLayout.addTab(tabLayout.newTab().setText("Photos"));
         tabLayout.addTab(tabLayout.newTab().setText("Parcours"));
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
@@ -83,7 +80,10 @@ public class ExploreFragment extends Fragment
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
             @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
+
         updateContent();
+        loadPhotosFromFirestore();
+        loadPathsFromFirestore();
 
         searchBar.setOnClickListener(v -> {
             NavOptions opts = new NavOptions.Builder()
@@ -101,32 +101,48 @@ public class ExploreFragment extends Fragment
                         Toast.LENGTH_SHORT).show();
                 return;
             }
-            Toast.makeText(requireContext(), "Planifier un parcours (TravelPath)",
-                    Toast.LENGTH_SHORT).show();
+            Navigation.findNavController(v).navigate(R.id.navigation_create_path);
+        });
+    }
+
+    private void loadPhotosFromFirestore() {
+        FirestoreRepository.get().loadPublicPhotos(photos -> {
+            if (!isAdded()) return;
+            loadedPhotos = photos;
+            if (!SessionManager.get().isAnonymous()) {
+                FirestoreRepository.get().checkLikedPhotos(photos, () -> {
+                    if (!isAdded()) return;
+                    FirestoreRepository.get().checkFavoritedPhotos(photos, () -> {
+                        if (!isAdded()) return;
+                        photoAdapter1.setPhotos(loadedPhotos);
+                        photoAdapter2.setPhotos(loadedPhotos);
+                    });
+                });
+            } else {
+                photoAdapter1.setPhotos(loadedPhotos);
+                photoAdapter2.setPhotos(loadedPhotos);
+            }
         });
     }
 
     private void loadPathsFromFirestore() {
-        List<TravelPath> samplePaths = SampleData.getSamplePaths();
-        pathAdapter1.setPaths(samplePaths);
-        pathAdapter2.setPaths(samplePaths);
-
-        PathRepository.get().getPublicPaths()
-                .addOnSuccessListener(querySnapshot -> {
+        FirestoreRepository.get().loadPublicPaths(paths -> {
+            if (!isAdded()) return;
+            loadedPaths = paths;
+            if (!SessionManager.get().isAnonymous()) {
+                FirestoreRepository.get().checkLikedPaths(paths, () -> {
                     if (!isAdded()) return;
-                    Log.d("Explore", "Firestore: " + querySnapshot.size() + " parcours trouvés");
-                    List<TravelPath> firestorePaths = querySnapshot.toObjects(TravelPath.class);
-                    for (int i = 0; i < querySnapshot.size(); i++) {
-                        firestorePaths.get(i).setId(querySnapshot.getDocuments().get(i).getId());
-                    }
-                    List<TravelPath> allPaths = new ArrayList<>(samplePaths);
-                    allPaths.addAll(0, firestorePaths);
-                    pathAdapter1.setPaths(allPaths);
-                    pathAdapter2.setPaths(allPaths);
-                })
-                .addOnFailureListener(e -> {
-                    Log.e("Explore", "Erreur chargement Firestore", e);
+                    FirestoreRepository.get().checkFavoritedPaths(paths, () -> {
+                        if (!isAdded()) return;
+                        pathAdapter1.setPaths(loadedPaths);
+                        pathAdapter2.setPaths(loadedPaths);
+                    });
                 });
+            } else {
+                pathAdapter1.setPaths(loadedPaths);
+                pathAdapter2.setPaths(loadedPaths);
+            }
+        });
     }
 
     private void updateContent() {
@@ -149,16 +165,52 @@ public class ExploreFragment extends Fragment
     @Override
     public void onLikeClick(Photo photo, int position) {
         if (SessionManager.get().isAnonymous()) {
-            Toast.makeText(requireContext(),
-                    "Connectez-vous pour liker une photo",
-                    Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), "Connectez-vous pour liker", Toast.LENGTH_SHORT).show();
             return;
         }
-        photo.setLiked(!photo.isLiked());
-        if (photo.isLiked()) UserRepository.get().likePhoto(photo);
-        else UserRepository.get().unlikePhoto(photo);
+        boolean newLiked = !photo.isLiked();
+        photo.setLiked(newLiked);
         photoAdapter1.notifyItemChanged(position);
         photoAdapter2.notifyItemChanged(position);
+        if (photo.getId() != null) {
+            FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
+            if (newLiked && photo.getAuthorId() != null) {
+                FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                if (me != null && !me.getUid().equals(photo.getAuthorId())) {
+                    String name = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                    NotificationRepository.get().sendNotification(
+                            photo.getAuthorId(), "like", me.getUid(), name,
+                            photo.getId(), "photo", photo.getTitle(), null);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onFavoriteClick(Photo photo, int position) {
+        if (SessionManager.get().isAnonymous()) {
+            Toast.makeText(requireContext(), "Connectez-vous pour ajouter aux favoris", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean newFav = !photo.isFavorited();
+        photo.setFavorited(newFav);
+        photoAdapter1.notifyItemChanged(position);
+        photoAdapter2.notifyItemChanged(position);
+        if (photo.getId() != null) {
+            FirestoreRepository.get().toggleFavoritePhoto(photo.getId(), newFav, null);
+            if (newFav && photo.getAuthorId() != null) {
+                FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                if (me != null && !me.getUid().equals(photo.getAuthorId())) {
+                    String name = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                    NotificationRepository.get().sendNotification(
+                            photo.getAuthorId(), "favorite", me.getUid(), name,
+                            photo.getId(), "photo", photo.getTitle(), null);
+                }
+            }
+        }
+        Toast.makeText(requireContext(),
+                newFav ? "Ajouté aux favoris" : "Retiré des favoris",
+                Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -171,15 +223,51 @@ public class ExploreFragment extends Fragment
     @Override
     public void onLikeClick(TravelPath path, int position) {
         if (SessionManager.get().isAnonymous()) {
-            Toast.makeText(requireContext(),
-                    "Connectez-vous pour liker un parcours",
-                    Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), "Connectez-vous pour liker", Toast.LENGTH_SHORT).show();
             return;
         }
-        path.setLiked(!path.isLiked());
-        if (path.isLiked()) UserRepository.get().likePath(path);
-        else UserRepository.get().unlikePath(path);
+        boolean newLiked = !path.isLiked();
+        path.setLiked(newLiked);
         pathAdapter1.notifyItemChanged(position);
         pathAdapter2.notifyItemChanged(position);
+        if (path.getId() != null) {
+            FirestoreRepository.get().toggleLikePath(path.getId(), newLiked, null);
+            if (newLiked && path.getAuthorId() != null) {
+                FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                if (me != null && !me.getUid().equals(path.getAuthorId())) {
+                    String name = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                    NotificationRepository.get().sendNotification(
+                            path.getAuthorId(), "like", me.getUid(), name,
+                            path.getId(), "path", path.getTitle(), null);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onFavoriteClick(TravelPath path, int position) {
+        if (SessionManager.get().isAnonymous()) {
+            Toast.makeText(requireContext(), "Connectez-vous pour ajouter aux favoris", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean newFav = !path.isFavorited();
+        path.setFavorited(newFav);
+        pathAdapter1.notifyItemChanged(position);
+        pathAdapter2.notifyItemChanged(position);
+        if (path.getId() != null) {
+            FirestoreRepository.get().toggleFavoritePath(path.getId(), newFav, null);
+            if (newFav && path.getAuthorId() != null) {
+                FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                if (me != null && !me.getUid().equals(path.getAuthorId())) {
+                    String name = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                    NotificationRepository.get().sendNotification(
+                            path.getAuthorId(), "favorite", me.getUid(), name,
+                            path.getId(), "path", path.getTitle(), null);
+                }
+            }
+        }
+        Toast.makeText(requireContext(),
+                newFav ? "Ajouté aux favoris" : "Retiré des favoris",
+                Toast.LENGTH_SHORT).show();
     }
 }

@@ -25,6 +25,7 @@ public class PathAdapter extends RecyclerView.Adapter<PathAdapter.PathViewHolder
     public interface OnPathClickListener {
         void onPathClick(TravelPath path);
         void onLikeClick(TravelPath path, int position);
+        void onFavoriteClick(TravelPath path, int position);
     }
 
     public PathAdapter(OnPathClickListener listener) {
@@ -79,7 +80,7 @@ public class PathAdapter extends RecyclerView.Adapter<PathAdapter.PathViewHolder
         TextView pathTitle, pathCity, pathDescription, pathDuration;
         TextView pathBudget, pathDifficulty, pathStepsCount, pathAuthor, likeCount;
         Chip typeChip;
-        ImageButton btnLike;
+        ImageButton btnLike, btnFavorite;
 
         PathViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -95,11 +96,12 @@ public class PathAdapter extends RecyclerView.Adapter<PathAdapter.PathViewHolder
             likeCount = itemView.findViewById(R.id.path_like_count);
             typeChip = itemView.findViewById(R.id.path_type_chip);
             btnLike = itemView.findViewById(R.id.btn_like_path);
+            btnFavorite = itemView.findViewById(R.id.btn_favorite_path);
         }
 
         void bind(TravelPath path, int position) {
             if (path.getImageResId() != 0) pathImage.setImageResource(path.getImageResId());
-            else pathImage.setImageResource(R.drawable.sample_path_1); // fallback
+            else pathImage.setImageResource(R.drawable.sample_path_1);
             pathTitle.setText(path.getTitle());
             pathCity.setText(path.getCity());
             pathDescription.setText(path.getDescription());
@@ -112,19 +114,21 @@ public class PathAdapter extends RecyclerView.Adapter<PathAdapter.PathViewHolder
             typeChip.setText(path.getType());
 
             btnLike.setImageResource(path.isLiked()
+                    ? R.drawable.ic_thumb_up_filled
+                    : R.drawable.ic_thumb_up);
+            btnFavorite.setImageResource(path.isFavorited()
                     ? R.drawable.ic_favorite_filled
                     : R.drawable.ic_favorite);
 
             btnLike.setOnClickListener(v -> {
-                if (listener != null) {
-                    listener.onLikeClick(path, position);
-                }
+                if (listener != null) listener.onLikeClick(path, getBindingAdapterPosition());
+            });
+            btnFavorite.setOnClickListener(v -> {
+                if (listener != null) listener.onFavoriteClick(path, getBindingAdapterPosition());
             });
 
             itemView.setOnClickListener(v -> {
-                if (listener != null) {
-                    listener.onPathClick(path);
-                }
+                if (listener != null) listener.onPathClick(path);
             });
         }
     }

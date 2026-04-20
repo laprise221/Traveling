@@ -12,6 +12,8 @@ import androidx.navigation.NavOptions;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
 
+import com.example.traveling.data.NotificationRepository;
+import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 public class MainActivity extends AppCompatActivity {
@@ -38,8 +40,6 @@ public class MainActivity extends AppCompatActivity {
         bottomNav.setOnItemSelectedListener(item -> {
             int destId = item.getItemId();
 
-            // Toujours revenir à la racine (explore) d'abord, puis aller à la destination.
-            // popUpTo explore inclusive=false : garde explore, vide ce qui est au-dessus.
             NavOptions opts = new NavOptions.Builder()
                     .setLaunchSingleTop(true)
                     .setPopUpTo(R.id.navigation_explore, false)
@@ -47,6 +47,28 @@ public class MainActivity extends AppCompatActivity {
 
             navController.navigate(destId, null, opts);
             return true;
+        });
+
+        refreshNotificationBadge();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshNotificationBadge();
+    }
+
+    private void refreshNotificationBadge() {
+        NotificationRepository.get().getUnreadCount(count -> {
+            BottomNavigationView nav = findViewById(R.id.bottom_navigation);
+            if (nav == null) return;
+            if (count > 0) {
+                BadgeDrawable badge = nav.getOrCreateBadge(R.id.navigation_profile);
+                badge.setVisible(true);
+                badge.setNumber(count);
+            } else {
+                nav.removeBadge(R.id.navigation_profile);
+            }
         });
     }
 }

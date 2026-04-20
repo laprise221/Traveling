@@ -12,7 +12,7 @@ public class TravelPath {
     private String title;
     private String city;
     private String description;
-    private String author;
+    private String authorName;
     private String authorId;
     private double startLatitude;
     private double startLongitude;
@@ -23,8 +23,10 @@ public class TravelPath {
     private int stepsCount;
     private int likeCount;
     private boolean liked;
+    private boolean favorited;
     private boolean isPublic;
     private List<PathStep> steps;
+    private String imageBase64;
     private int imageResId;
     @ServerTimestamp
     private Date createdAt;
@@ -39,7 +41,7 @@ public class TravelPath {
         this.title = title;
         this.city = city;
         this.description = description;
-        this.author = author;
+        this.authorName = author;
         this.startLatitude = startLatitude;
         this.startLongitude = startLongitude;
         this.duration = duration;
@@ -57,7 +59,7 @@ public class TravelPath {
     public String getTitle() { return title; }
     public String getCity() { return city; }
     public String getDescription() { return description; }
-    public String getAuthor() { return author; }
+    public String getAuthorName() { return authorName; }
     public String getAuthorId() { return authorId; }
     public double getStartLatitude() { return startLatitude; }
     public double getStartLongitude() { return startLongitude; }
@@ -67,6 +69,8 @@ public class TravelPath {
     public String getType() { return type; }
     public int getStepsCount() { return stepsCount; }
     public int getLikeCount() { return likeCount; }
+    public boolean getIsPublic() { return isPublic; }
+    public String getImageBase64() { return imageBase64; }
     @Exclude
     public boolean isLiked() { return liked; }
     public boolean isPublic() { return isPublic; }
@@ -75,11 +79,15 @@ public class TravelPath {
     public int getImageResId() { return imageResId; }
     public Date getCreatedAt() { return createdAt; }
 
+    @Exclude
+    public String getAuthor() { return authorName; }
+
     public void setId(String id) { this.id = id; }
     public void setTitle(String title) { this.title = title; }
     public void setCity(String city) { this.city = city; }
     public void setDescription(String description) { this.description = description; }
-    public void setAuthor(String author) { this.author = author; }
+    public void setAuthorName(String authorName) { this.authorName = authorName; }
+    public void setAuthor(String author) { this.authorName = author; }
     public void setAuthorId(String authorId) { this.authorId = authorId; }
     public void setStartLatitude(double startLatitude) { this.startLatitude = startLatitude; }
     public void setStartLongitude(double startLongitude) { this.startLongitude = startLongitude; }
@@ -93,8 +101,13 @@ public class TravelPath {
         this.liked = liked;
         this.likeCount += liked ? 1 : -1;
     }
+    public void setLikedSilent(boolean liked) { this.liked = liked; }
+    @Exclude public boolean isFavorited() { return favorited; }
+    public void setFavoritedSilent(boolean favorited) { this.favorited = favorited; }
+    public void setFavorited(boolean favorited) { this.favorited = favorited; }
     public void setPublic(boolean isPublic) { this.isPublic = isPublic; }
     public void setSteps(List<PathStep> steps) { this.steps = steps; }
+    public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
     public void setImageResId(int imageResId) { this.imageResId = imageResId; }
     public void setCreatedAt(Date createdAt) { this.createdAt = createdAt; }
 }

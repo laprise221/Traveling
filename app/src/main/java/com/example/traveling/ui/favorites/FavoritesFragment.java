@@ -10,11 +10,13 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
 import com.example.traveling.session.SessionManager;
@@ -22,7 +24,7 @@ import com.example.traveling.ui.explore.PathAdapter;
 import com.example.traveling.ui.explore.PhotoAdapter;
 import com.google.android.material.tabs.TabLayout;
 
-import java.util.List;
+import java.util.ArrayList;
 
 public class FavoritesFragment extends Fragment
         implements PhotoAdapter.OnPhotoClickListener, PathAdapter.OnPathClickListener {
@@ -68,14 +70,14 @@ public class FavoritesFragment extends Fragment
         tabLayout.addTab(tabLayout.newTab().setText("Parcours"));
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override public void onTabSelected(TabLayout.Tab tab) {
-                if (tab.getPosition() == 0) showLikedPhotos();
-                else showLikedPaths();
+                if (tab.getPosition() == 0) showFavoritedPhotos();
+                else showFavoritedPaths();
             }
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
             @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
 
-        showLikedPhotos();
+        showFavoritedPhotos();
     }
 
     @Override
@@ -83,44 +85,45 @@ public class FavoritesFragment extends Fragment
         super.onResume();
         if (!SessionManager.get().isAnonymous()) {
             int selected = tabLayout.getSelectedTabPosition();
-            if (selected == 1) showLikedPaths();
-            else showLikedPhotos();
+            if (selected == 1) showFavoritedPaths();
+            else showFavoritedPhotos();
         }
     }
 
-    private void showLikedPhotos() {
+    private void showFavoritedPhotos() {
         recyclerView.setAdapter(photoAdapter);
         emptyText.setVisibility(View.GONE);
 
-        // Load liked photo IDs, then load the full photo documents
-        FirestoreRepository.get().loadLikedPhotoIds(photoIds -> {
+        FirestoreRepository.get().loadFavoritedPhotoIds(photoIds -> {
             if (!isAdded()) return;
             if (photoIds.isEmpty()) {
-                photoAdapter.setPhotos(new java.util.ArrayList<>());
+                photoAdapter.setPhotos(new ArrayList<>());
                 emptyText.setVisibility(View.VISIBLE);
                 return;
             }
             FirestoreRepository.get().loadPhotosByIds(photoIds, photos -> {
                 if (!isAdded()) return;
+                for (Photo p : photos) p.setFavoritedSilent(true);
                 photoAdapter.setPhotos(photos);
                 emptyText.setVisibility(photos.isEmpty() ? View.VISIBLE : View.GONE);
             });
         });
     }
 
-    private void showLikedPaths() {
+    private void showFavoritedPaths() {
         recyclerView.setAdapter(pathAdapter);
         emptyText.setVisibility(View.GONE);
 
-        FirestoreRepository.get().loadLikedPathIds(pathIds -> {
+        FirestoreRepository.get().loadFavoritedPathIds(pathIds -> {
             if (!isAdded()) return;
             if (pathIds.isEmpty()) {
-                pathAdapter.setPaths(new java.util.ArrayList<>());
+                pathAdapter.setPaths(new ArrayList<>());
                 emptyText.setVisibility(View.VISIBLE);
                 return;
             }
             FirestoreRepository.get().loadPathsByIds(pathIds, paths -> {
                 if (!isAdded()) return;
+                for (TravelPath p : paths) p.setFavoritedSilent(true);
                 pathAdapter.setPaths(paths);
                 emptyText.setVisibility(paths.isEmpty() ? View.VISIBLE : View.GONE);
             });
@@ -128,16 +131,27 @@ public class FavoritesFragment extends Fragment
     }
 
     @Override public void onPhotoClick(Photo photo) {
-        Toast.makeText(requireContext(), photo.getTitle(), Toast.LENGTH_SHORT).show();
+        PhotoRegistry.set(photo);
+        Navigation.findNavController(requireView()).navigate(R.id.navigation_photo_detail);
     }
 
     @Override public void onLikeClick(Photo photo, int position) {
-        // Unlike from favorites
-        photo.setLiked(false);
+        // Like depuis les favoris — persiste directement
+        boolean newLiked = !photo.isLiked();
+        photo.setLiked(newLiked);
+        photoAdapter.notifyItemChanged(position);
         if (photo.getId() != null) {
-            FirestoreRepository.get().toggleLikePhoto(photo.getId(), false, null);
+            FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
         }
-        showLikedPhotos(); // Refresh the list
+    }
+
+    @Override public void onFavoriteClick(Photo photo, int position) {
+        // Retirer des favoris
+        photo.setFavorited(false);
+        if (photo.getId() != null) {
+            FirestoreRepository.get().toggleFavoritePhoto(photo.getId(), false, null);
+        }
+        showFavoritedPhotos();
     }
 
     @Override public void onPathClick(TravelPath path) {
@@ -145,10 +159,19 @@ public class FavoritesFragment extends Fragment
     }
 
     @Override public void onLikeClick(TravelPath path, int position) {
-        path.setLiked(false);
+        boolean newLiked = !path.isLiked();
+        path.setLiked(newLiked);
+        pathAdapter.notifyItemChanged(position);
         if (path.getId() != null) {
-            FirestoreRepository.get().toggleLikePath(path.getId(), false, null);
+            FirestoreRepository.get().toggleLikePath(path.getId(), newLiked, null);
         }
-        showLikedPaths();
+    }
+
+    @Override public void onFavoriteClick(TravelPath path, int position) {
+        path.setFavorited(false);
+        if (path.getId() != null) {
+            FirestoreRepository.get().toggleFavoritePath(path.getId(), false, null);
+        }
+        showFavoritedPaths();
     }
 }

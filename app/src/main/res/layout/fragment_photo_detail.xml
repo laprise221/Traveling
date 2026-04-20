@@ -153,7 +153,7 @@
                         android:id="@+id/btn_like"
                         android:layout_width="36dp"
                         android:layout_height="36dp"
-                        android:src="@drawable/ic_favorite"
+                        android:src="@drawable/ic_thumb_up"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:contentDescription="Like" />
 
@@ -164,6 +164,15 @@
                         android:layout_marginStart="4dp"
                         android:textSize="14sp"
                         android:textColor="#555555" />
+
+                    <ImageButton
+                        android:id="@+id/btn_favorite"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="12dp"
+                        android:src="@drawable/ic_favorite"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Favori" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/detail_type_chip"

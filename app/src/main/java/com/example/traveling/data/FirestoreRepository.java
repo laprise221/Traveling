@@ -18,9 +18,11 @@ import com.google.firebase.firestore.SetOptions;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Central repository for all Firestore CRUD operations.
@@ -117,7 +119,6 @@ public class FirestoreRepository {
     public void loadUserPhotos(String uid, OnSuccessCallback<List<Photo>> callback) {
         db.collection("photos")
                 .whereEqualTo("authorId", uid)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(snapshots -> {
                     List<Photo> photos = new ArrayList<>();
@@ -135,7 +136,8 @@ public class FirestoreRepository {
 
     // ===================== PHOTO LIKES =====================
 
-    /** Toggle like on a photo (add or remove like sub-document + update likeCount) */
+    /** Toggle like on a photo. Uses two independent writes so the like doc saves
+     *  even if likeCount update is blocked by security rules for non-owners. */
     public void toggleLikePhoto(String photoId, boolean like, OnSuccessCallback<Void> callback) {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) return;
@@ -148,18 +150,21 @@ public class FirestoreRepository {
             Map<String, Object> likeData = new HashMap<>();
             likeData.put("userId", user.getUid());
             likeData.put("likedAt", FieldValue.serverTimestamp());
-
-            db.runBatch(batch -> {
-                batch.set(likeRef, likeData);
-                batch.update(photoRef, "likeCount", FieldValue.increment(1));
-            }).addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
-              .addOnFailureListener(e -> Log.e(TAG, "Error toggling photo like", e));
+            likeRef.set(likeData)
+                    .addOnSuccessListener(v -> {
+                        photoRef.update("likeCount", FieldValue.increment(1))
+                                .addOnFailureListener(e -> Log.w(TAG, "likeCount update denied, like still saved", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error saving like", e));
         } else {
-            db.runBatch(batch -> {
-                batch.delete(likeRef);
-                batch.update(photoRef, "likeCount", FieldValue.increment(-1));
-            }).addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
-              .addOnFailureListener(e -> Log.e(TAG, "Error toggling photo like", e));
+            likeRef.delete()
+                    .addOnSuccessListener(v -> {
+                        photoRef.update("likeCount", FieldValue.increment(-1))
+                                .addOnFailureListener(e -> Log.w(TAG, "likeCount update denied", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error removing like", e));
         }
     }
 
@@ -266,7 +271,7 @@ public class FirestoreRepository {
         data.put("type", path.getType());
         data.put("likeCount", 0);
         data.put("commentCount", 0);
-        data.put("isPublic", path.getIsPublic());
+        data.put("public", path.getIsPublic());
         data.put("imageBase64", path.getImageBase64());
         data.put("createdAt", FieldValue.serverTimestamp());
 
@@ -307,7 +312,7 @@ public class FirestoreRepository {
     /** Load all public paths, ordered by newest first */
     public void loadPublicPaths(OnSuccessCallback<List<TravelPath>> callback) {
         db.collection("paths")
-                .whereEqualTo("isPublic", true)
+                .whereEqualTo("public", true)
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(snapshots -> {
@@ -328,7 +333,6 @@ public class FirestoreRepository {
     public void loadUserPaths(String uid, OnSuccessCallback<List<TravelPath>> callback) {
         db.collection("paths")
                 .whereEqualTo("authorId", uid)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(snapshots -> {
                     List<TravelPath> paths = new ArrayList<>();
@@ -346,7 +350,7 @@ public class FirestoreRepository {
 
     // ===================== PATH LIKES =====================
 
-    /** Toggle like on a path */
+    /** Toggle like on a path. Same separate-write pattern as toggleLikePhoto. */
     public void toggleLikePath(String pathId, boolean like, OnSuccessCallback<Void> callback) {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) return;
@@ -359,17 +363,21 @@ public class FirestoreRepository {
             Map<String, Object> likeData = new HashMap<>();
             likeData.put("userId", user.getUid());
             likeData.put("likedAt", FieldValue.serverTimestamp());
-            db.runBatch(batch -> {
-                batch.set(likeRef, likeData);
-                batch.update(pathRef, "likeCount", FieldValue.increment(1));
-            }).addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
-              .addOnFailureListener(e -> Log.e(TAG, "Error toggling path like", e));
+            likeRef.set(likeData)
+                    .addOnSuccessListener(v -> {
+                        pathRef.update("likeCount", FieldValue.increment(1))
+                                .addOnFailureListener(e -> Log.w(TAG, "likeCount update denied, like still saved", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error saving path like", e));
         } else {
-            db.runBatch(batch -> {
-                batch.delete(likeRef);
-                batch.update(pathRef, "likeCount", FieldValue.increment(-1));
-            }).addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
-              .addOnFailureListener(e -> Log.e(TAG, "Error toggling path like", e));
+            likeRef.delete()
+                    .addOnSuccessListener(v -> {
+                        pathRef.update("likeCount", FieldValue.increment(-1))
+                                .addOnFailureListener(e -> Log.w(TAG, "likeCount update denied", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error removing path like", e));
         }
     }
 
@@ -552,6 +560,136 @@ public class FirestoreRepository {
                         if (--remaining[0] == 0) callback.onSuccess(paths);
                     });
         }
+    }
+
+    // ===================== FAVORITES =====================
+    // Stored under users/{uid}/favoritedPhotos/{photoId} and users/{uid}/favoritedPaths/{pathId}
+    // to avoid needing collectionGroup indexes.
+
+    public void toggleFavoritePhoto(String photoId, boolean favorite, OnSuccessCallback<Void> callback) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) return;
+        DocumentReference favRef = db.collection("users").document(user.getUid())
+                .collection("favoritedPhotos").document(photoId);
+        if (favorite) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("savedAt", FieldValue.serverTimestamp());
+            favRef.set(data)
+                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error saving photo favorite", e));
+        } else {
+            favRef.delete()
+                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error removing photo favorite", e));
+        }
+    }
+
+    public void toggleFavoritePath(String pathId, boolean favorite, OnSuccessCallback<Void> callback) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) return;
+        DocumentReference favRef = db.collection("users").document(user.getUid())
+                .collection("favoritedPaths").document(pathId);
+        if (favorite) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("savedAt", FieldValue.serverTimestamp());
+            favRef.set(data)
+                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error saving path favorite", e));
+        } else {
+            favRef.delete()
+                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error removing path favorite", e));
+        }
+    }
+
+    public void isPhotoFavorited(String photoId, OnSuccessCallback<Boolean> callback) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) { callback.onSuccess(false); return; }
+        db.collection("users").document(user.getUid())
+                .collection("favoritedPhotos").document(photoId)
+                .get()
+                .addOnSuccessListener(doc -> callback.onSuccess(doc.exists()))
+                .addOnFailureListener(e -> callback.onSuccess(false));
+    }
+
+    public void isPathFavorited(String pathId, OnSuccessCallback<Boolean> callback) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) { callback.onSuccess(false); return; }
+        db.collection("users").document(user.getUid())
+                .collection("favoritedPaths").document(pathId)
+                .get()
+                .addOnSuccessListener(doc -> callback.onSuccess(doc.exists()))
+                .addOnFailureListener(e -> callback.onSuccess(false));
+    }
+
+    public void loadFavoritedPhotoIds(OnSuccessCallback<List<String>> callback) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) { callback.onSuccess(new ArrayList<>()); return; }
+        db.collection("users").document(user.getUid())
+                .collection("favoritedPhotos")
+                .get()
+                .addOnSuccessListener(snapshots -> {
+                    List<String> ids = new ArrayList<>();
+                    for (DocumentSnapshot doc : snapshots) ids.add(doc.getId());
+                    callback.onSuccess(ids);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error loading favorited photo IDs", e);
+                    callback.onSuccess(new ArrayList<>());
+                });
+    }
+
+    public void loadFavoritedPathIds(OnSuccessCallback<List<String>> callback) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) { callback.onSuccess(new ArrayList<>()); return; }
+        db.collection("users").document(user.getUid())
+                .collection("favoritedPaths")
+                .get()
+                .addOnSuccessListener(snapshots -> {
+                    List<String> ids = new ArrayList<>();
+                    for (DocumentSnapshot doc : snapshots) ids.add(doc.getId());
+                    callback.onSuccess(ids);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error loading favorited path IDs", e);
+                    callback.onSuccess(new ArrayList<>());
+                });
+    }
+
+    public void checkFavoritedPhotos(List<Photo> photos, Runnable onComplete) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null || photos.isEmpty()) { if (onComplete != null) onComplete.run(); return; }
+        db.collection("users").document(user.getUid())
+                .collection("favoritedPhotos")
+                .get()
+                .addOnSuccessListener(snapshots -> {
+                    Set<String> favIds = new HashSet<>();
+                    for (DocumentSnapshot doc : snapshots) favIds.add(doc.getId());
+                    for (Photo photo : photos) {
+                        if (photo.getId() != null && favIds.contains(photo.getId()))
+                            photo.setFavoritedSilent(true);
+                    }
+                    if (onComplete != null) onComplete.run();
+                })
+                .addOnFailureListener(e -> { if (onComplete != null) onComplete.run(); });
+    }
+
+    public void checkFavoritedPaths(List<TravelPath> paths, Runnable onComplete) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null || paths.isEmpty()) { if (onComplete != null) onComplete.run(); return; }
+        db.collection("users").document(user.getUid())
+                .collection("favoritedPaths")
+                .get()
+                .addOnSuccessListener(snapshots -> {
+                    Set<String> favIds = new HashSet<>();
+                    for (DocumentSnapshot doc : snapshots) favIds.add(doc.getId());
+                    for (TravelPath path : paths) {
+                        if (path.getId() != null && favIds.contains(path.getId()))
+                            path.setFavoritedSilent(true);
+                    }
+                    if (onComplete != null) onComplete.run();
+                })
+                .addOnFailureListener(e -> { if (onComplete != null) onComplete.run(); });
     }
 
     // ===================== HELPERS =====================

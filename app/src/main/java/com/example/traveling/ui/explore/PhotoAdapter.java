@@ -25,6 +25,7 @@ public class PhotoAdapter extends RecyclerView.Adapter<PhotoAdapter.PhotoViewHol
     public interface OnPhotoClickListener {
         void onPhotoClick(Photo photo);
         void onLikeClick(Photo photo, int position);
+        void onFavoriteClick(Photo photo, int position);
     }
 
     public PhotoAdapter(OnPhotoClickListener listener) {
@@ -78,7 +79,7 @@ public class PhotoAdapter extends RecyclerView.Adapter<PhotoAdapter.PhotoViewHol
         ImageView photoImage;
         TextView photoTitle, photoLocation, photoDescription, photoAuthor, photoDate, likeCount;
         Chip typeChip;
-        ImageButton btnLike;
+        ImageButton btnLike, btnFavorite;
 
         PhotoViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -91,6 +92,7 @@ public class PhotoAdapter extends RecyclerView.Adapter<PhotoAdapter.PhotoViewHol
             likeCount = itemView.findViewById(R.id.photo_like_count);
             typeChip = itemView.findViewById(R.id.photo_type_chip);
             btnLike = itemView.findViewById(R.id.btn_like_photo);
+            btnFavorite = itemView.findViewById(R.id.btn_favorite_photo);
         }
 
         void bind(Photo photo, int position) {
@@ -106,19 +108,21 @@ public class PhotoAdapter extends RecyclerView.Adapter<PhotoAdapter.PhotoViewHol
             typeChip.setText(photo.getLocationType());
 
             btnLike.setImageResource(photo.isLiked()
+                    ? R.drawable.ic_thumb_up_filled
+                    : R.drawable.ic_thumb_up);
+            btnFavorite.setImageResource(photo.isFavorited()
                     ? R.drawable.ic_favorite_filled
                     : R.drawable.ic_favorite);
 
             btnLike.setOnClickListener(v -> {
-                if (listener != null) {
-                    listener.onLikeClick(photo, position);
-                }
+                if (listener != null) listener.onLikeClick(photo, getBindingAdapterPosition());
+            });
+            btnFavorite.setOnClickListener(v -> {
+                if (listener != null) listener.onFavoriteClick(photo, getBindingAdapterPosition());
             });
 
             itemView.setOnClickListener(v -> {
-                if (listener != null) {
-                    listener.onPhotoClick(photo);
-                }
+                if (listener != null) listener.onPhotoClick(photo);
             });
         }
     }

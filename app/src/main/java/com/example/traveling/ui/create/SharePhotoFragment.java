@@ -10,9 +10,11 @@ import android.provider.MediaStore;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -26,13 +28,19 @@ import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.GroupRepository;
 import com.example.traveling.data.ImageUtils;
+import com.example.traveling.model.Group;
 import com.example.traveling.model.Photo;
+import com.example.traveling.session.SessionManager;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class SharePhotoFragment extends Fragment {
 
@@ -41,9 +49,13 @@ public class SharePhotoFragment extends Fragment {
     private TextInputEditText etTitle, etDescription, etLocation;
     private ChipGroup chipGroupType;
     private SwitchMaterial switchPublic;
+    private LinearLayout layoutGroupCheckboxes;
+    private TextView tvNoGroups;
 
     private Uri selectedImageUri = null;
     private Bitmap selectedBitmap = null;
+    private final List<String> selectedGroupIds = new ArrayList<>();
+    private List<Group> userGroups = new ArrayList<>();
 
     private final ActivityResultLauncher<Intent> galleryLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -102,12 +114,46 @@ public class SharePhotoFragment extends Fragment {
         chipGroupType = view.findViewById(R.id.chip_group_type);
         switchPublic = view.findViewById(R.id.switch_public);
 
+        layoutGroupCheckboxes = view.findViewById(R.id.layout_group_checkboxes);
+        tvNoGroups = view.findViewById(R.id.tv_no_groups);
+
         FrameLayout photoZone = view.findViewById(R.id.photo_picker_zone);
         photoZone.setOnClickListener(v -> showImageSourceDialog());
 
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
                 Navigation.findNavController(v).navigateUp());
         view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
+
+        if (!SessionManager.get().isAnonymous()) {
+            loadUserGroups();
+        } else {
+            tvNoGroups.setText("Connectez-vous pour partager dans un groupe");
+        }
+    }
+
+    private void loadUserGroups() {
+        tvNoGroups.setText("Chargement des groupes...");
+        GroupRepository.get().loadUserGroups(groups -> {
+            if (!isAdded()) return;
+            userGroups = groups;
+            layoutGroupCheckboxes.removeAllViews();
+            if (groups.isEmpty()) {
+                tvNoGroups.setText("Vous n'avez pas encore de groupes");
+                tvNoGroups.setVisibility(View.VISIBLE);
+                return;
+            }
+            tvNoGroups.setVisibility(View.GONE);
+            for (Group g : groups) {
+                CheckBox cb = new CheckBox(requireContext());
+                cb.setText(g.getName());
+                cb.setTextSize(14f);
+                cb.setOnCheckedChangeListener((btn, checked) -> {
+                    if (checked) selectedGroupIds.add(g.getId());
+                    else selectedGroupIds.remove(g.getId());
+                });
+                layoutGroupCheckboxes.addView(cb);
+            }
+        });
     }
 
     private void showImageSourceDialog() {
@@ -207,11 +253,17 @@ public class SharePhotoFragment extends Fragment {
 
         // Save to Firestore
         FirestoreRepository.get().savePhoto(photo,
-                id -> {
-                    if (isAdded()) {
-                        Toast.makeText(requireContext(), "Photo publiée !", Toast.LENGTH_SHORT).show();
-                        Navigation.findNavController(requireView()).navigateUp();
+                photoId -> {
+                    if (!isAdded()) return;
+                    // Share to each selected group
+                    for (String groupId : selectedGroupIds) {
+                        GroupRepository.get().addGroupPost(groupId, photoId, null, null);
                     }
+                    String msg = selectedGroupIds.isEmpty()
+                            ? "Photo publiée !"
+                            : "Photo publiée et partagée dans " + selectedGroupIds.size() + " groupe(s) !";
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+                    Navigation.findNavController(requireView()).navigateUp();
                 },
                 e -> {
                     if (isAdded()) {

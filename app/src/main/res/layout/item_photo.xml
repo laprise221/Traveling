@@ -108,7 +108,7 @@
                     android:layout_width="36dp"
                     android:layout_height="36dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_favorite"
+                    android:src="@drawable/ic_thumb_up"
                     android:contentDescription="Like"
                     android:scaleType="centerInside" />
 
@@ -119,6 +119,16 @@
                     android:layout_marginStart="2dp"
                     android:textSize="13sp"
                     android:textColor="@android:color/darker_gray" />
+
+                <ImageButton
+                    android:id="@+id/btn_favorite_photo"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_favorite"
+                    android:contentDescription="Favori"
+                    android:scaleType="centerInside" />
 
             </LinearLayout>
 

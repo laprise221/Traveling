@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.NotificationRepository;
 import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.Comment;
 import com.example.traveling.model.Photo;
@@ -37,7 +38,7 @@ public class PhotoDetailFragment extends Fragment {
     private Photo photo;
     private CommentAdapter commentAdapter;
     private TextView likeCount, tvNoComments;
-    private ImageButton btnLike;
+    private ImageButton btnLike, btnFavorite;
 
     @Nullable
     @Override
@@ -84,19 +85,26 @@ public class PhotoDetailFragment extends Fragment {
         Chip typeChip = view.findViewById(R.id.detail_type_chip);
         typeChip.setText(photo.getLocationType().isEmpty() ? "autre" : photo.getLocationType());
 
-        // Like
+        // Like (pouce)
         btnLike = view.findViewById(R.id.btn_like);
         likeCount = view.findViewById(R.id.detail_like_count);
+        // Favori (cœur)
+        btnFavorite = view.findViewById(R.id.btn_favorite);
 
-        // Check if current user liked this photo
         if (!isAnonymous && photo.getId() != null) {
             FirestoreRepository.get().isPhotoLiked(photo.getId(), liked -> {
                 if (!isAdded()) return;
                 photo.setLikedSilent(liked);
                 updateLikeUI();
             });
+            FirestoreRepository.get().isPhotoFavorited(photo.getId(), favorited -> {
+                if (!isAdded()) return;
+                photo.setFavoritedSilent(favorited);
+                updateFavoriteUI();
+            });
         }
         updateLikeUI();
+        updateFavoriteUI();
 
         btnLike.setEnabled(!isAnonymous);
         btnLike.setAlpha(isAnonymous ? 0.4f : 1f);
@@ -104,10 +112,41 @@ public class PhotoDetailFragment extends Fragment {
             boolean newLiked = !photo.isLiked();
             photo.setLiked(newLiked);
             updateLikeUI();
-            // Persist to Firestore
             if (photo.getId() != null) {
                 FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
+                if (newLiked && photo.getAuthorId() != null) {
+                    FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                    if (me != null && !me.getUid().equals(photo.getAuthorId())) {
+                        String n = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                        NotificationRepository.get().sendNotification(
+                                photo.getAuthorId(), "like", me.getUid(), n,
+                                photo.getId(), "photo", photo.getTitle(), null);
+                    }
+                }
             }
+        });
+
+        btnFavorite.setEnabled(!isAnonymous);
+        btnFavorite.setAlpha(isAnonymous ? 0.4f : 1f);
+        btnFavorite.setOnClickListener(v -> {
+            boolean newFav = !photo.isFavorited();
+            photo.setFavorited(newFav);
+            updateFavoriteUI();
+            if (photo.getId() != null) {
+                FirestoreRepository.get().toggleFavoritePhoto(photo.getId(), newFav, null);
+                if (newFav && photo.getAuthorId() != null) {
+                    FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                    if (me != null && !me.getUid().equals(photo.getAuthorId())) {
+                        String n = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                        NotificationRepository.get().sendNotification(
+                                photo.getAuthorId(), "favorite", me.getUid(), n,
+                                photo.getId(), "photo", photo.getTitle(), null);
+                    }
+                }
+            }
+            Toast.makeText(requireContext(),
+                    newFav ? "Ajouté aux favoris" : "Retiré des favoris",
+                    Toast.LENGTH_SHORT).show();
         });
 
         // Commentaires
@@ -163,9 +202,14 @@ public class PhotoDetailFragment extends Fragment {
                 etComment.setText("");
                 refreshComments();
 
-                // Persist to Firestore
+                // Persist to Firestore + notify owner
                 if (photo.getId() != null) {
                     FirestoreRepository.get().addPhotoComment(photo.getId(), comment, null);
+                    if (photo.getAuthorId() != null && !photo.getAuthorId().equals(authorId)) {
+                        NotificationRepository.get().sendNotification(
+                                photo.getAuthorId(), "comment", authorId, authorName,
+                                photo.getId(), "photo", photo.getTitle(), text);
+                    }
                 }
             });
         }
@@ -174,6 +218,11 @@ public class PhotoDetailFragment extends Fragment {
     private void updateLikeUI() {
         likeCount.setText(photo.getLikeCount() + " j'aime");
         btnLike.setImageResource(photo.isLiked()
+                ? R.drawable.ic_thumb_up_filled : R.drawable.ic_thumb_up);
+    }
+
+    private void updateFavoriteUI() {
+        btnFavorite.setImageResource(photo.isFavorited()
                 ? R.drawable.ic_favorite_filled : R.drawable.ic_favorite);
     }
 

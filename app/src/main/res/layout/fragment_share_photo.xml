@@ -214,7 +214,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="24dp">
+                android:layout_marginBottom="16dp">
 
                 <TextView
                     android:layout_width="0dp"
@@ -228,6 +228,32 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true" />
+
+            </LinearLayout>
+
+            <!-- Partager dans des groupes -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Partager aussi dans mes groupes"
+                android:textSize="15sp"
+                android:textColor="@android:color/black"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/layout_group_checkboxes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:id="@+id/tv_no_groups"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Chargement des groupes..."
+                    android:textColor="#999999"
+                    android:textSize="13sp" />
 
             </LinearLayout>
 
