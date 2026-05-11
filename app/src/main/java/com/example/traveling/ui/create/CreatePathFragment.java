@@ -45,6 +45,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -706,6 +707,9 @@ public class CreatePathFragment extends Fragment {
             pois.remove(bestIdx);
         }
 
+        // Reorder for shortest open path
+        picked = optimalOrder(picked);
+
         double totalKm = 0;
         for (int i = 1; i < picked.size(); i++) {
             totalKm += distanceKm(
@@ -715,6 +719,100 @@ public class CreatePathFragment extends Fragment {
 
         int estBudget = picked.size() * costPerStep;
         return new PathOption(name, picked, totalKm, estBudget);
+    }
+
+    /**
+     * Returns the permutation of steps that minimises total straight-line distance
+     * (open path, no fixed start/end).
+     * Exact TSP with branch-and-bound for N ≤ 9; NN+2-opt fallback beyond that.
+     */
+    private List<PathStep> optimalOrder(List<PathStep> steps) {
+        int n = steps.size();
+        if (n <= 2) return new ArrayList<>(steps);
+        if (n <= 9) {
+            TspState state = new TspState();
+            permTSP(null, new ArrayList<>(steps), new ArrayList<>(n), 0.0, state);
+            return state.bestPath != null ? state.bestPath : new ArrayList<>(steps);
+        }
+        // Fallback for large N: nearest-neighbor + 2-opt
+        List<PathStep> result = new ArrayList<>(steps);
+        nnOrder(result);
+        twoOptImprove(result);
+        return result;
+    }
+
+    private static class TspState {
+        List<PathStep> bestPath = null;
+        double bestDist = Double.MAX_VALUE;
+    }
+
+    private void permTSP(PathStep current, List<PathStep> remaining,
+                         List<PathStep> path, double dist, TspState state) {
+        if (remaining.isEmpty()) {
+            if (dist < state.bestDist) {
+                state.bestDist = dist;
+                state.bestPath = new ArrayList<>(path);
+            }
+            return;
+        }
+        for (int i = 0; i < remaining.size(); i++) {
+            PathStep next = remaining.remove(i);
+            double d = current == null ? 0.0 : distanceKm(
+                    current.getLatitude(), current.getLongitude(),
+                    next.getLatitude(), next.getLongitude());
+            double newDist = dist + d;
+            if (newDist < state.bestDist) { // branch-and-bound pruning
+                path.add(next);
+                permTSP(next, remaining, path, newDist, state);
+                path.remove(path.size() - 1);
+            }
+            remaining.add(i, next);
+        }
+    }
+
+    /** Nearest-neighbor reorder in-place (used as fallback seed for 2-opt). */
+    private void nnOrder(List<PathStep> steps) {
+        int n = steps.size();
+        for (int i = 0; i < n - 1; i++) {
+            PathStep cur = steps.get(i);
+            int nearestIdx = i + 1;
+            double minDist = distanceKm(cur.getLatitude(), cur.getLongitude(),
+                    steps.get(i + 1).getLatitude(), steps.get(i + 1).getLongitude());
+            for (int j = i + 2; j < n; j++) {
+                double d = distanceKm(cur.getLatitude(), cur.getLongitude(),
+                        steps.get(j).getLatitude(), steps.get(j).getLongitude());
+                if (d < minDist) { minDist = d; nearestIdx = j; }
+            }
+            Collections.swap(steps, i + 1, nearestIdx);
+        }
+    }
+
+    /** 2-opt improvement in-place (no fixed start). */
+    private void twoOptImprove(List<PathStep> route) {
+        int n = route.size();
+        boolean improved = true;
+        while (improved) {
+            improved = false;
+            outer:
+            for (int i = 0; i < n - 1; i++) {
+                for (int j = i + 2; j < n; j++) {
+                    double before = stepDist(route, i, i + 1)
+                            + (j < n - 1 ? stepDist(route, j, j + 1) : 0);
+                    double after = stepDist(route, i, j)
+                            + (j < n - 1 ? stepDist(route, i + 1, j + 1) : 0);
+                    if (after < before - 1e-9) {
+                        Collections.reverse(route.subList(i + 1, j + 1));
+                        improved = true;
+                        break outer;
+                    }
+                }
+            }
+        }
+    }
+
+    private double stepDist(List<PathStep> route, int a, int b) {
+        return distanceKm(route.get(a).getLatitude(), route.get(a).getLongitude(),
+                route.get(b).getLatitude(), route.get(b).getLongitude());
     }
 
     private void displayOptions(List<PathOption> options, int dureeMax) {
