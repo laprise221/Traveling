@@ -186,7 +186,7 @@ public class GroupRepository {
     public void loadGroupPosts(String groupId, FirestoreRepository.OnSuccessCallback<QuerySnapshot> callback) {
         db.collection("groups").document(groupId)
                 .collection("posts")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy("createdAt", Query.Direction.ASCENDING)
                 .get()
                 .addOnSuccessListener(callback::onSuccess)
                 .addOnFailureListener(e -> {

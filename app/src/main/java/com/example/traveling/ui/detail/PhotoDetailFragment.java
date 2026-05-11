@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.ImageUtils;
 import com.example.traveling.data.NotificationRepository;
 import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.Comment;
@@ -70,9 +71,16 @@ public class PhotoDetailFragment extends Fragment {
 
         // Image
         ImageView image = view.findViewById(R.id.detail_image);
-        if (photo.getImageBitmap() != null) image.setImageBitmap(photo.getImageBitmap());
-        else if (photo.getImageUri() != null) image.setImageURI(photo.getImageUri());
-        else if (photo.getImageResId() != 0) image.setImageResource(photo.getImageResId());
+        if (photo.getImageBitmap() != null) {
+            image.setImageBitmap(photo.getImageBitmap());
+        } else if (photo.getImageUri() != null) {
+            image.setImageURI(photo.getImageUri());
+        } else if (photo.getImageResId() != 0) {
+            image.setImageResource(photo.getImageResId());
+        } else if (photo.getImageBase64() != null && !photo.getImageBase64().isEmpty()) {
+            android.graphics.Bitmap bmp = ImageUtils.base64ToBitmap(photo.getImageBase64());
+            if (bmp != null) image.setImageBitmap(bmp);
+        }
 
         // Infos
         ((TextView) view.findViewById(R.id.detail_title)).setText(photo.getTitle());

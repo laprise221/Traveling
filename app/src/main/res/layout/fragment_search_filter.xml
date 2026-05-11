@@ -219,24 +219,34 @@
                     android:orientation="horizontal"
                     android:layout_marginTop="8dp">
 
-                    <EditText
+                    <TextView
                         android:id="@+id/period_from"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:hint="Du (jj/mm/aaaa)"
-                        android:inputType="date"
-                        android:textSize="13sp" />
+                        android:hint="Du"
+                        android:textSize="13sp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="8dp"
+                        android:drawableEnd="@android:drawable/ic_menu_today"
+                        android:drawablePadding="6dp"
+                        android:background="?android:attr/editTextBackground" />
 
-                    <EditText
+                    <TextView
                         android:id="@+id/period_to"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:layout_marginStart="8dp"
-                        android:hint="Au (jj/mm/aaaa)"
-                        android:inputType="date"
-                        android:textSize="13sp" />
+                        android:hint="Au"
+                        android:textSize="13sp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="8dp"
+                        android:drawableEnd="@android:drawable/ic_menu_today"
+                        android:drawablePadding="6dp"
+                        android:background="?android:attr/editTextBackground" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -341,14 +351,33 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_apply_filters"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Appliquer les filtres"
-            android:textAllCaps="false"
-            app:cornerRadius="24dp"
-            android:padding="14dp" />
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_reset_filters"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="Réinitialiser"
+                android:textAllCaps="false"
+                app:cornerRadius="24dp"
+                android:padding="14dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_apply_filters"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Appliquer"
+                android:textAllCaps="false"
+                app:cornerRadius="24dp"
+                android:padding="14dp" />
+        </LinearLayout>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

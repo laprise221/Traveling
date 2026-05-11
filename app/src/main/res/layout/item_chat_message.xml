@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <!-- Spacer gauche : visible seulement pour mes messages (pour pousser la bulle à droite) -->
+    <View
+        android:id="@+id/spacer_start"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_weight="1"
+        android:visibility="gone" />
+
+    <!-- Bulle de message -->
+    <LinearLayout
+        android:id="@+id/bubble"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:background="@drawable/bg_chat_other">
+
+        <!-- Nom de l'auteur (affiché seulement pour les messages des autres) -->
+        <TextView
+            android:id="@+id/tv_author_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:textColor="#555555"
+            android:layout_marginBottom="3dp"
+            android:visibility="gone" />
+
+        <!-- Photo partagée -->
+        <ImageView
+            android:id="@+id/iv_photo"
+            android:layout_width="180dp"
+            android:layout_height="130dp"
+            android:scaleType="centerCrop"
+            android:adjustViewBounds="true"
+            android:visibility="gone"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Texte du message -->
+        <TextView
+            android:id="@+id/tv_message"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#222222"
+            android:visibility="gone" />
+
+        <!-- Heure d'envoi -->
+        <TextView
+            android:id="@+id/tv_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:textSize="10sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+
+    <!-- Spacer droit : visible seulement pour les messages des autres (pour garder la bulle à gauche) -->
+    <View
+        android:id="@+id/spacer_end"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_weight="1"
+        android:visibility="visible" />
+
+</LinearLayout>
