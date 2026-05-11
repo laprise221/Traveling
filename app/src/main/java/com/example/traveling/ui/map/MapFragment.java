@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
+import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -47,10 +48,12 @@ import org.osmdroid.views.overlay.Polyline;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -59,6 +62,11 @@ public class MapFragment extends Fragment implements LocationListener {
     private static final int REQUEST_LOCATION_PERMISSION = 100;
     private static final double WALKING_SPEED_KMH = 5.0;
     private static final double STEP_REACHED_THRESHOLD_M = 30.0;
+    private static final double DEVIATION_RECALC_M = 50.0;
+    private static final double MANEUVER_ANNOUNCE_M = 35.0;
+    private static final double MANEUVER_PASSED_M = 15.0;
+    private static final long RECALC_COOLDOWN_MS = 10_000L;
+    private static final String ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ4YWFkZjhlMWY3ZDQ2NjU4YmYxYzM1OTllM2RiN2QwIiwiaCI6Im11cm11cjY0In0=";
 
     private MapView mapView;
     private RadioGroup filterGroup;
@@ -70,15 +78,33 @@ public class MapFragment extends Fragment implements LocationListener {
     private List<Marker> pathMarkers = new ArrayList<>();
 
     private MaterialCardView navOverlay;
-    private TextView navPathTitle, navStepLabel, navNextStep, navDistance, navTime;
+    private TextView navPathTitle, navStepLabel, navNextStep, navDistance, navTime, navManeuver;
 
     private LocationManager locationManager;
     private Marker userMarker;
     private List<Marker> activePathMarkers = new ArrayList<>();
     private Polyline activeRoutePolyline;
 
+    private TextToSpeech tts;
+    private boolean ttsReady = false;
+    private final List<Maneuver> currentManeuvers = new ArrayList<>();
+    private List<GeoPoint> currentRoutePoints = new ArrayList<>();
+    private int currentManeuverIdx = 0;
+    private long lastRecalcMs = 0L;
+    private boolean recalcInFlight = false;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private static class Maneuver {
+        final GeoPoint location;
+        final String instruction;
+        boolean announced;
+        Maneuver(GeoPoint location, String instruction) {
+            this.location = location;
+            this.instruction = instruction;
+        }
+    }
 
     @Nullable
     @Override
@@ -110,6 +136,15 @@ public class MapFragment extends Fragment implements LocationListener {
         navNextStep = view.findViewById(R.id.nav_next_step);
         navDistance = view.findViewById(R.id.nav_distance);
         navTime = view.findViewById(R.id.nav_time);
+        navManeuver = view.findViewById(R.id.nav_maneuver);
+
+        tts = new TextToSpeech(requireContext().getApplicationContext(), status -> {
+            if (status == TextToSpeech.SUCCESS && tts != null) {
+                int res = tts.setLanguage(Locale.FRENCH);
+                ttsReady = res != TextToSpeech.LANG_MISSING_DATA
+                        && res != TextToSpeech.LANG_NOT_SUPPORTED;
+            }
+        });
 
         view.findViewById(R.id.btn_stop_path).setOnClickListener(v -> stopActivePath());
 
@@ -199,7 +234,12 @@ public class MapFragment extends Fragment implements LocationListener {
             zoomToFit(points);
         }
 
-        fetchAndDrawRoute(steps);
+        currentManeuvers.clear();
+        currentRoutePoints = new ArrayList<>();
+        currentManeuverIdx = 0;
+        navManeuver.setVisibility(View.GONE);
+
+        fetchAndDrawRoute(null, steps);
         updateNavigationOverlay(null);
         startLocationUpdates();
     }
@@ -218,6 +258,10 @@ public class MapFragment extends Fragment implements LocationListener {
             mapView.getOverlays().remove(userMarker);
             userMarker = null;
         }
+        currentManeuvers.clear();
+        currentRoutePoints = new ArrayList<>();
+        currentManeuverIdx = 0;
+        navManeuver.setVisibility(View.GONE);
         navOverlay.setVisibility(View.GONE);
         mapView.invalidate();
         Toast.makeText(requireContext(), "Parcours arrêté", Toast.LENGTH_SHORT).show();
@@ -248,32 +292,55 @@ public class MapFragment extends Fragment implements LocationListener {
         });
     }
 
-    private void fetchAndDrawRoute(List<PathStep> steps) {
+    private void fetchAndDrawRoute(@Nullable GeoPoint origin, List<PathStep> steps) {
         List<PathStep> validSteps = new ArrayList<>();
         for (PathStep s : steps) {
             if (s.getLatitude() != 0 || s.getLongitude() != 0) validSteps.add(s);
         }
-        if (validSteps.size() < 2) return;
+        int totalCoords = (origin != null ? 1 : 0) + validSteps.size();
+        if (totalCoords < 2) {
+            recalcInFlight = false;
+            return;
+        }
 
         executor.execute(() -> {
             try {
-                StringBuilder coords = new StringBuilder();
-                for (int i = 0; i < validSteps.size(); i++) {
-                    if (i > 0) coords.append(";");
-                    coords.append(validSteps.get(i).getLongitude())
-                          .append(",").append(validSteps.get(i).getLatitude());
+                JSONArray coordsArr = new JSONArray();
+                if (origin != null) {
+                    JSONArray c = new JSONArray();
+                    c.put(origin.getLongitude());
+                    c.put(origin.getLatitude());
+                    coordsArr.put(c);
                 }
-                String urlStr = "https://router.project-osrm.org/route/v1/foot/"
-                        + coords + "?overview=full&geometries=geojson";
+                for (PathStep s : validSteps) {
+                    JSONArray c = new JSONArray();
+                    c.put(s.getLongitude());
+                    c.put(s.getLatitude());
+                    coordsArr.put(c);
+                }
+                JSONObject body = new JSONObject();
+                body.put("coordinates", coordsArr);
+                body.put("instructions", true);
+                body.put("language", "fr");
 
-                URL url = new URL(urlStr);
+                URL url = new URL("https://api.openrouteservice.org/v2/directions/foot-walking/geojson");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Authorization", ORS_API_KEY);
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setRequestProperty("Accept", "application/json, application/geo+json");
                 conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
+                conn.setReadTimeout(15000);
+                conn.setDoOutput(true);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(body.toString().getBytes("UTF-8"));
+                }
 
                 List<GeoPoint> routePoints = new ArrayList<>();
-                if (conn.getResponseCode() == 200) {
+                List<Maneuver> maneuvers = new ArrayList<>();
+                int code = conn.getResponseCode();
+
+                if (code == 200) {
                     BufferedReader reader = new BufferedReader(
                             new InputStreamReader(conn.getInputStream()));
                     StringBuilder sb = new StringBuilder();
@@ -282,41 +349,137 @@ public class MapFragment extends Fragment implements LocationListener {
                     reader.close();
 
                     JSONObject json = new JSONObject(sb.toString());
-                    if ("Ok".equals(json.optString("code", ""))) {
-                        JSONArray routes = json.getJSONArray("routes");
-                        if (routes.length() > 0) {
-                            JSONArray coordinates = routes.getJSONObject(0)
-                                    .getJSONObject("geometry").getJSONArray("coordinates");
-                            for (int i = 0; i < coordinates.length(); i++) {
-                                JSONArray c = coordinates.getJSONArray(i);
-                                routePoints.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
+                    JSONArray features = json.optJSONArray("features");
+                    if (features != null && features.length() > 0) {
+                        JSONObject feat = features.getJSONObject(0);
+                        JSONArray coordinates = feat.getJSONObject("geometry")
+                                .getJSONArray("coordinates");
+                        for (int i = 0; i < coordinates.length(); i++) {
+                            JSONArray c = coordinates.getJSONArray(i);
+                            routePoints.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
+                        }
+                        JSONArray segments = feat.getJSONObject("properties")
+                                .optJSONArray("segments");
+                        if (segments != null) {
+                            for (int si = 0; si < segments.length(); si++) {
+                                JSONArray ssteps = segments.getJSONObject(si)
+                                        .optJSONArray("steps");
+                                if (ssteps == null) continue;
+                                for (int j = 0; j < ssteps.length(); j++) {
+                                    JSONObject step = ssteps.getJSONObject(j);
+                                    int type = step.optInt("type", -1);
+                                    if (type == 10 || type == 11) continue; // arrive / depart
+                                    String instr = step.optString("instruction", "");
+                                    if (instr.isEmpty()) continue;
+                                    JSONArray wp = step.optJSONArray("way_points");
+                                    if (wp == null || wp.length() == 0) continue;
+                                    int locIdx = wp.getInt(0);
+                                    if (locIdx < 0 || locIdx >= coordinates.length()) continue;
+                                    JSONArray loc = coordinates.getJSONArray(locIdx);
+                                    maneuvers.add(new Maneuver(
+                                            new GeoPoint(loc.getDouble(1), loc.getDouble(0)),
+                                            instr));
+                                }
                             }
                         }
                     }
+                } else {
+                    Log.w("MapFragment", "ORS HTTP " + code);
                 }
 
-                // Fallback : ligne droite
                 if (routePoints.isEmpty()) {
+                    if (origin != null) routePoints.add(origin);
                     for (PathStep s : validSteps) {
                         routePoints.add(new GeoPoint(s.getLatitude(), s.getLongitude()));
                     }
                 }
 
                 List<GeoPoint> finalPoints = routePoints;
+                List<Maneuver> finalManeuvers = maneuvers;
                 mainHandler.post(() -> {
-                    if (!isAdded()) return;
+                    if (!isAdded()) {
+                        recalcInFlight = false;
+                        return;
+                    }
+                    if (activeRoutePolyline != null) {
+                        mapView.getOverlays().remove(activeRoutePolyline);
+                    }
                     activeRoutePolyline = new Polyline(mapView);
                     activeRoutePolyline.setPoints(finalPoints);
                     activeRoutePolyline.getOutlinePaint().setColor(Color.parseColor("#1976D2"));
                     activeRoutePolyline.getOutlinePaint().setStrokeWidth(10f);
                     activeRoutePolyline.getOutlinePaint().setAntiAlias(true);
                     mapView.getOverlayManager().add(0, activeRoutePolyline);
+
+                    currentRoutePoints = finalPoints;
+                    currentManeuvers.clear();
+                    currentManeuvers.addAll(finalManeuvers);
+                    currentManeuverIdx = 0;
+
                     mapView.invalidate();
+                    recalcInFlight = false;
                 });
             } catch (Exception e) {
                 Log.e("MapFragment", "Route fetch error", e);
+                mainHandler.post(() -> recalcInFlight = false);
             }
         });
+    }
+
+    private void tryRecalcRoute(GeoPoint userPos) {
+        if (recalcInFlight) return;
+        if (currentRoutePoints == null || currentRoutePoints.isEmpty()) return;
+
+        long now = System.currentTimeMillis();
+        if (now - lastRecalcMs < RECALC_COOLDOWN_MS) return;
+
+        double minDist = Double.MAX_VALUE;
+        for (GeoPoint p : currentRoutePoints) {
+            double d = distanceMeters(userPos.getLatitude(), userPos.getLongitude(),
+                    p.getLatitude(), p.getLongitude());
+            if (d < minDist) minDist = d;
+        }
+        if (minDist <= DEVIATION_RECALC_M) return;
+
+        TravelPath path = ActivePathRegistry.getActivePath();
+        if (path == null || path.getSteps() == null) return;
+
+        int idx = ActivePathRegistry.getCurrentStepIndex();
+        List<PathStep> remaining = new ArrayList<>();
+        for (int i = idx; i < path.getSteps().size(); i++) {
+            PathStep s = path.getSteps().get(i);
+            if (s.getLatitude() != 0 || s.getLongitude() != 0) remaining.add(s);
+        }
+        if (remaining.isEmpty()) return;
+
+        recalcInFlight = true;
+        lastRecalcMs = now;
+        Toast.makeText(requireContext(),
+                "Recalcul de l'itinéraire…", Toast.LENGTH_SHORT).show();
+        fetchAndDrawRoute(userPos, remaining);
+    }
+
+    private void updateManeuverOverlay(GeoPoint userPos) {
+        if (currentManeuvers.isEmpty() || currentManeuverIdx >= currentManeuvers.size()) {
+            navManeuver.setVisibility(View.GONE);
+            return;
+        }
+        Maneuver m = currentManeuvers.get(currentManeuverIdx);
+        double dist = distanceMeters(userPos.getLatitude(), userPos.getLongitude(),
+                m.location.getLatitude(), m.location.getLongitude());
+
+        navManeuver.setVisibility(View.VISIBLE);
+        navManeuver.setText(m.instruction + " · dans " + formatDistance(dist));
+
+        if (dist <= MANEUVER_ANNOUNCE_M && !m.announced) {
+            m.announced = true;
+            if (ttsReady && tts != null) {
+                tts.speak(m.instruction, TextToSpeech.QUEUE_FLUSH, null, "maneuver");
+            }
+        }
+        if (dist <= MANEUVER_PASSED_M) {
+            currentManeuverIdx++;
+        }
     }
 
     // ---------- Localisation ----------
@@ -370,6 +533,8 @@ public class MapFragment extends Fragment implements LocationListener {
 
         if (ActivePathRegistry.isActive()) {
             updateNavigationOverlay(userPos);
+            updateManeuverOverlay(userPos);
+            tryRecalcRoute(userPos);
         }
     }
 
@@ -526,6 +691,12 @@ public class MapFragment extends Fragment implements LocationListener {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+            tts = null;
+        }
+        ttsReady = false;
         executor.shutdownNow();
     }
 }

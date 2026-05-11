@@ -36,6 +36,7 @@ import org.osmdroid.views.overlay.Polyline;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -44,6 +45,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class PathDetailFragment extends Fragment {
+
+    private static final String ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ4YWFkZjhlMWY3ZDQ2NjU4YmYxYzM1OTllM2RiN2QwIiwiaCI6Im11cm11cjY0In0=";
 
     private MapView mapView;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -195,38 +198,41 @@ public class PathDetailFragment extends Fragment {
         Log.d("PathDetail", "fetchRoute: " + steps.size() + " étapes");
         List<PathStep> validSteps = new ArrayList<>();
         for (PathStep s : steps) {
-            Log.d("PathDetail", "Step: " + s.getName() + " lat=" + s.getLatitude() + " lon=" + s.getLongitude());
             if (s.getLatitude() != 0 || s.getLongitude() != 0) {
                 validSteps.add(s);
             }
         }
-        Log.d("PathDetail", "Valid steps: " + validSteps.size());
         if (validSteps.size() < 2) return;
 
         executor.execute(() -> {
             try {
-                StringBuilder coords = new StringBuilder();
-                for (int i = 0; i < validSteps.size(); i++) {
-                    if (i > 0) coords.append(";");
-                    coords.append(validSteps.get(i).getLongitude())
-                          .append(",")
-                          .append(validSteps.get(i).getLatitude());
+                JSONArray coordsArr = new JSONArray();
+                for (PathStep s : validSteps) {
+                    JSONArray c = new JSONArray();
+                    c.put(s.getLongitude());
+                    c.put(s.getLatitude());
+                    coordsArr.put(c);
+                }
+                JSONObject body = new JSONObject();
+                body.put("coordinates", coordsArr);
+                body.put("instructions", false);
+
+                URL url = new URL("https://api.openrouteservice.org/v2/directions/foot-walking/geojson");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Authorization", ORS_API_KEY);
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setRequestProperty("Accept", "application/json, application/geo+json");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(15000);
+                conn.setDoOutput(true);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(body.toString().getBytes("UTF-8"));
                 }
 
-                String urlStr = "https://router.project-osrm.org/route/v1/foot/"
-                        + coords
-                        + "?overview=full&geometries=geojson";
-
-                URL url = new URL(urlStr);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
-
                 int responseCode = conn.getResponseCode();
-                Log.d("PathDetail", "OSRM response: " + responseCode);
+                Log.d("PathDetail", "ORS response: " + responseCode);
                 if (responseCode != 200) {
-                    Log.d("PathDetail", "OSRM failed, drawing straight lines");
                     mainHandler.post(() -> drawStraightLine(validSteps));
                     return;
                 }
@@ -239,51 +245,38 @@ public class PathDetailFragment extends Fragment {
                 reader.close();
 
                 JSONObject json = new JSONObject(sb.toString());
-                String code = json.optString("code", "");
-                if (!"Ok".equals(code)) {
-                    Log.d("PathDetail", "OSRM code: " + code + ", drawing straight lines");
-                    mainHandler.post(() -> drawStraightLine(validSteps));
-                    return;
-                }
-                JSONArray routes = json.getJSONArray("routes");
-                if (routes.length() == 0) {
+                JSONArray features = json.optJSONArray("features");
+                if (features == null || features.length() == 0) {
                     mainHandler.post(() -> drawStraightLine(validSteps));
                     return;
                 }
 
-                JSONArray coordinates = routes.getJSONObject(0)
+                JSONArray coordinates = features.getJSONObject(0)
                         .getJSONObject("geometry")
                         .getJSONArray("coordinates");
 
                 List<GeoPoint> routePoints = new ArrayList<>();
                 for (int i = 0; i < coordinates.length(); i++) {
                     JSONArray coord = coordinates.getJSONArray(i);
-                    double lon = coord.getDouble(0);
-                    double lat = coord.getDouble(1);
-                    routePoints.add(new GeoPoint(lat, lon));
+                    routePoints.add(new GeoPoint(coord.getDouble(1), coord.getDouble(0)));
                 }
 
                 mainHandler.post(() -> {
                     if (!isAdded()) return;
-                    Log.d("PathDetail", "Drawing polyline with " + routePoints.size() + " points");
-
                     Polyline polyline = new Polyline(mapView);
                     polyline.setPoints(routePoints);
                     polyline.getOutlinePaint().setColor(Color.BLUE);
                     polyline.getOutlinePaint().setStrokeWidth(10f);
                     polyline.getOutlinePaint().setAntiAlias(true);
-
                     mapView.getOverlayManager().add(polyline);
                     mapView.invalidate();
-
-                    Log.d("PathDetail", "Polyline added, overlays count: " + mapView.getOverlays().size());
                 });
 
             } catch (Exception e) {
+                Log.e("PathDetail", "Route fetch error", e);
                 mainHandler.post(() -> {
                     if (!isAdded()) return;
-                    Toast.makeText(requireContext(),
-                            "Impossible de charger l'itinéraire", Toast.LENGTH_SHORT).show();
+                    drawStraightLine(validSteps);
                 });
             }
         });
