@@ -72,6 +72,7 @@ public class FirestoreRepository {
         data.put("locationType", photo.getLocationType());
         data.put("likeCount", 0);
         data.put("commentCount", 0);
+        data.put("favoriteCount", 0);
         data.put("isPublic", photo.getIsPublic());
         data.put("groupId", photo.getGroupId());
         data.put("imageBase64", photo.getImageBase64());
@@ -271,6 +272,7 @@ public class FirestoreRepository {
         data.put("type", path.getType());
         data.put("likeCount", 0);
         data.put("commentCount", 0);
+        data.put("favoriteCount", 0);
         data.put("public", path.getIsPublic());
         data.put("imageBase64", path.getImageBase64());
         data.put("createdAt", FieldValue.serverTimestamp());
@@ -571,15 +573,24 @@ public class FirestoreRepository {
         if (user == null) return;
         DocumentReference favRef = db.collection("users").document(user.getUid())
                 .collection("favoritedPhotos").document(photoId);
+        DocumentReference photoRef = db.collection("photos").document(photoId);
         if (favorite) {
             Map<String, Object> data = new HashMap<>();
             data.put("savedAt", FieldValue.serverTimestamp());
             favRef.set(data)
-                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnSuccessListener(v -> {
+                        photoRef.update("favoriteCount", FieldValue.increment(1))
+                                .addOnFailureListener(e -> Log.w(TAG, "favoriteCount update denied", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
                     .addOnFailureListener(e -> Log.e(TAG, "Error saving photo favorite", e));
         } else {
             favRef.delete()
-                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnSuccessListener(v -> {
+                        photoRef.update("favoriteCount", FieldValue.increment(-1))
+                                .addOnFailureListener(e -> Log.w(TAG, "favoriteCount update denied", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
                     .addOnFailureListener(e -> Log.e(TAG, "Error removing photo favorite", e));
         }
     }
@@ -589,15 +600,24 @@ public class FirestoreRepository {
         if (user == null) return;
         DocumentReference favRef = db.collection("users").document(user.getUid())
                 .collection("favoritedPaths").document(pathId);
+        DocumentReference pathRef = db.collection("paths").document(pathId);
         if (favorite) {
             Map<String, Object> data = new HashMap<>();
             data.put("savedAt", FieldValue.serverTimestamp());
             favRef.set(data)
-                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnSuccessListener(v -> {
+                        pathRef.update("favoriteCount", FieldValue.increment(1))
+                                .addOnFailureListener(e -> Log.w(TAG, "favoriteCount update denied", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
                     .addOnFailureListener(e -> Log.e(TAG, "Error saving path favorite", e));
         } else {
             favRef.delete()
-                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnSuccessListener(v -> {
+                        pathRef.update("favoriteCount", FieldValue.increment(-1))
+                                .addOnFailureListener(e -> Log.w(TAG, "favoriteCount update denied", e));
+                        if (callback != null) callback.onSuccess(null);
+                    })
                     .addOnFailureListener(e -> Log.e(TAG, "Error removing path favorite", e));
         }
     }

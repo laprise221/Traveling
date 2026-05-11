@@ -32,6 +32,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ExploreFragment extends Fragment
@@ -105,7 +106,7 @@ public class ExploreFragment extends Fragment
         if (!loadedPhotos.isEmpty() && !FilterRegistry.get().isEmpty()) {
             List<Photo> filtered = applyFilters(loadedPhotos);
             photoAdapter1.setPhotos(filtered);
-            photoAdapter2.setPhotos(filtered);
+            photoAdapter2.setPhotos(sortByPopularity(filtered));
         }
     }
 
@@ -120,15 +121,35 @@ public class ExploreFragment extends Fragment
                         if (!isAdded()) return;
                         List<Photo> filtered = applyFilters(loadedPhotos);
                         photoAdapter1.setPhotos(filtered);
-                        photoAdapter2.setPhotos(filtered);
+                        photoAdapter2.setPhotos(sortByPopularity(filtered));
                     });
                 });
             } else {
                 List<Photo> filtered = applyFilters(loadedPhotos);
                 photoAdapter1.setPhotos(filtered);
-                photoAdapter2.setPhotos(filtered);
+                photoAdapter2.setPhotos(sortByPopularity(filtered));
             }
         });
+    }
+
+    private List<Photo> sortByPopularity(List<Photo> photos) {
+        List<Photo> sorted = new ArrayList<>(photos);
+        Collections.sort(sorted, (a, b) -> {
+            int scoreA = a.getLikeCount() + a.getCommentCount() + a.getFavoriteCount();
+            int scoreB = b.getLikeCount() + b.getCommentCount() + b.getFavoriteCount();
+            return Integer.compare(scoreB, scoreA);
+        });
+        return sorted;
+    }
+
+    private List<TravelPath> sortPathsByPopularity(List<TravelPath> paths) {
+        List<TravelPath> sorted = new ArrayList<>(paths);
+        Collections.sort(sorted, (a, b) -> {
+            int scoreA = a.getLikeCount() + a.getCommentCount() + a.getFavoriteCount();
+            int scoreB = b.getLikeCount() + b.getCommentCount() + b.getFavoriteCount();
+            return Integer.compare(scoreB, scoreA);
+        });
+        return sorted;
     }
 
     private List<Photo> applyFilters(List<Photo> photos) {
@@ -188,12 +209,12 @@ public class ExploreFragment extends Fragment
                     FirestoreRepository.get().checkFavoritedPaths(paths, () -> {
                         if (!isAdded()) return;
                         pathAdapter1.setPaths(loadedPaths);
-                        pathAdapter2.setPaths(loadedPaths);
+                        pathAdapter2.setPaths(sortPathsByPopularity(loadedPaths));
                     });
                 });
             } else {
                 pathAdapter1.setPaths(loadedPaths);
-                pathAdapter2.setPaths(loadedPaths);
+                pathAdapter2.setPaths(sortPathsByPopularity(loadedPaths));
             }
         });
     }

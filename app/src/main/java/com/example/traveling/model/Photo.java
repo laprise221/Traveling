@@ -24,6 +24,7 @@ public class Photo {
     private String locationType;
     private int likeCount;
     private int commentCount;
+    private int favoriteCount;
     private boolean isPublic;
     private String groupId;
     private String imageBase64;
@@ -72,6 +73,7 @@ public class Photo {
     public String getLocationType() { return locationType; }
     public int getLikeCount() { return likeCount; }
     public int getCommentCount() { return commentCount; }
+    public int getFavoriteCount() { return favoriteCount; }
     public boolean getIsPublic() { return isPublic; }
     public String getGroupId() { return groupId; }
     public String getImageBase64() { return imageBase64; }
@@ -104,6 +106,7 @@ public class Photo {
     public void setLocationType(String locationType) { this.locationType = locationType; }
     public void setLikeCount(int likeCount) { this.likeCount = likeCount; }
     public void setCommentCount(int commentCount) { this.commentCount = commentCount; }
+    public void setFavoriteCount(int favoriteCount) { this.favoriteCount = favoriteCount; }
     public void setIsPublic(boolean isPublic) { this.isPublic = isPublic; }
     public void setGroupId(String groupId) { this.groupId = groupId; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
@@ -126,5 +129,8 @@ public class Photo {
 
     @Exclude public boolean isFavorited() { return favorited; }
     public void setFavoritedSilent(boolean favorited) { this.favorited = favorited; }
-    public void setFavorited(boolean favorited) { this.favorited = favorited; }
+    public void setFavorited(boolean favorited) {
+        this.favorited = favorited;
+        this.favoriteCount += favorited ? 1 : -1;
+    }
 }
