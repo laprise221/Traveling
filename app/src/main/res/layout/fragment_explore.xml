@@ -85,15 +85,7 @@
                     android:shadowDy="2"
                     android:shadowRadius="6" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_plan_path"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="planifier un parcours"
-                    android:textAllCaps="false"
-                    app:cornerRadius="20dp"
-                    android:backgroundTint="@color/colorAccent" />
+
             </LinearLayout>
         </FrameLayout>
 

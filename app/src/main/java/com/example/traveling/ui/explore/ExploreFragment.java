@@ -55,7 +55,6 @@ public class ExploreFragment extends Fragment
         super.onViewCreated(view, savedInstanceState);
 
         MaterialCardView searchBar = view.findViewById(R.id.search_bar_card);
-        MaterialButton planBtn = view.findViewById(R.id.btn_plan_path);
         TabLayout tabLayout = view.findViewById(R.id.tab_layout_explore);
         recycler1 = view.findViewById(R.id.recycler_photos);
         recycler2 = view.findViewById(R.id.recycler_paths);
@@ -94,15 +93,7 @@ public class ExploreFragment extends Fragment
                     .navigate(R.id.navigation_search_filter, null, opts);
         });
 
-        planBtn.setOnClickListener(v -> {
-            if (SessionManager.get().isAnonymous()) {
-                Toast.makeText(requireContext(),
-                        "Connectez-vous pour planifier un parcours",
-                        Toast.LENGTH_SHORT).show();
-                return;
-            }
-            Navigation.findNavController(v).navigate(R.id.navigation_create_path);
-        });
+
     }
 
     private void loadPhotosFromFirestore() {
