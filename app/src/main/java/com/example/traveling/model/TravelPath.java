@@ -22,6 +22,8 @@ public class TravelPath {
     private String type;
     private int stepsCount;
     private int likeCount;
+    private int commentCount;
+    private int favoriteCount;
     private boolean liked;
     private boolean favorited;
     private boolean isPublic;
@@ -69,6 +71,8 @@ public class TravelPath {
     public String getType() { return type; }
     public int getStepsCount() { return stepsCount; }
     public int getLikeCount() { return likeCount; }
+    public int getCommentCount() { return commentCount; }
+    public int getFavoriteCount() { return favoriteCount; }
     public boolean getIsPublic() { return isPublic; }
     public String getImageBase64() { return imageBase64; }
     @Exclude
@@ -97,6 +101,8 @@ public class TravelPath {
     public void setType(String type) { this.type = type; }
     public void setStepsCount(int stepsCount) { this.stepsCount = stepsCount; }
     public void setLikeCount(int likeCount) { this.likeCount = likeCount; }
+    public void setCommentCount(int commentCount) { this.commentCount = commentCount; }
+    public void setFavoriteCount(int favoriteCount) { this.favoriteCount = favoriteCount; }
     public void setLiked(boolean liked) {
         this.liked = liked;
         this.likeCount += liked ? 1 : -1;
@@ -104,7 +110,10 @@ public class TravelPath {
     public void setLikedSilent(boolean liked) { this.liked = liked; }
     @Exclude public boolean isFavorited() { return favorited; }
     public void setFavoritedSilent(boolean favorited) { this.favorited = favorited; }
-    public void setFavorited(boolean favorited) { this.favorited = favorited; }
+    public void setFavorited(boolean favorited) {
+        this.favorited = favorited;
+        this.favoriteCount += favorited ? 1 : -1;
+    }
     public void setPublic(boolean isPublic) { this.isPublic = isPublic; }
     public void setSteps(List<PathStep> steps) { this.steps = steps; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }

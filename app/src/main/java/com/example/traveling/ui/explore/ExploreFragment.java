@@ -16,10 +16,12 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.traveling.R;
+import com.example.traveling.data.FilterRegistry;
 import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.NotificationRepository;
 import com.example.traveling.data.PathRegistry;
 import com.example.traveling.data.PhotoRegistry;
+import com.example.traveling.data.SearchFilters;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
 import com.example.traveling.session.SessionManager;
@@ -30,6 +32,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.tabs.TabLayout;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ExploreFragment extends Fragment
@@ -55,7 +58,6 @@ public class ExploreFragment extends Fragment
         super.onViewCreated(view, savedInstanceState);
 
         MaterialCardView searchBar = view.findViewById(R.id.search_bar_card);
-        MaterialButton planBtn = view.findViewById(R.id.btn_plan_path);
         TabLayout tabLayout = view.findViewById(R.id.tab_layout_explore);
         recycler1 = view.findViewById(R.id.recycler_photos);
         recycler2 = view.findViewById(R.id.recycler_paths);
@@ -94,15 +96,18 @@ public class ExploreFragment extends Fragment
                     .navigate(R.id.navigation_search_filter, null, opts);
         });
 
-        planBtn.setOnClickListener(v -> {
-            if (SessionManager.get().isAnonymous()) {
-                Toast.makeText(requireContext(),
-                        "Connectez-vous pour planifier un parcours",
-                        Toast.LENGTH_SHORT).show();
-                return;
-            }
-            Navigation.findNavController(v).navigate(R.id.navigation_create_path);
-        });
+
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Ré-appliquer seulement si des filtres sont actifs ET que des photos sont chargées
+        if (!loadedPhotos.isEmpty() && !FilterRegistry.get().isEmpty()) {
+            List<Photo> filtered = applyFilters(loadedPhotos);
+            photoAdapter1.setPhotos(filtered);
+            photoAdapter2.setPhotos(sortByPopularity(filtered));
+        }
     }
 
     private void loadPhotosFromFirestore() {
@@ -114,15 +119,84 @@ public class ExploreFragment extends Fragment
                     if (!isAdded()) return;
                     FirestoreRepository.get().checkFavoritedPhotos(photos, () -> {
                         if (!isAdded()) return;
-                        photoAdapter1.setPhotos(loadedPhotos);
-                        photoAdapter2.setPhotos(loadedPhotos);
+                        List<Photo> filtered = applyFilters(loadedPhotos);
+                        photoAdapter1.setPhotos(filtered);
+                        photoAdapter2.setPhotos(sortByPopularity(filtered));
                     });
                 });
             } else {
-                photoAdapter1.setPhotos(loadedPhotos);
-                photoAdapter2.setPhotos(loadedPhotos);
+                List<Photo> filtered = applyFilters(loadedPhotos);
+                photoAdapter1.setPhotos(filtered);
+                photoAdapter2.setPhotos(sortByPopularity(filtered));
             }
         });
+    }
+
+    private List<Photo> sortByPopularity(List<Photo> photos) {
+        List<Photo> sorted = new ArrayList<>(photos);
+        Collections.sort(sorted, (a, b) -> {
+            int scoreA = a.getLikeCount() + a.getCommentCount() + a.getFavoriteCount();
+            int scoreB = b.getLikeCount() + b.getCommentCount() + b.getFavoriteCount();
+            return Integer.compare(scoreB, scoreA);
+        });
+        return sorted;
+    }
+
+    private List<TravelPath> sortPathsByPopularity(List<TravelPath> paths) {
+        List<TravelPath> sorted = new ArrayList<>(paths);
+        Collections.sort(sorted, (a, b) -> {
+            int scoreA = a.getLikeCount() + a.getCommentCount() + a.getFavoriteCount();
+            int scoreB = b.getLikeCount() + b.getCommentCount() + b.getFavoriteCount();
+            return Integer.compare(scoreB, scoreA);
+        });
+        return sorted;
+    }
+
+    private List<Photo> applyFilters(List<Photo> photos) {
+        SearchFilters filters = FilterRegistry.get();
+        if (filters.isEmpty()) return photos;
+
+        List<Photo> result = new ArrayList<>();
+        for (Photo p : photos) {
+            // Filtre texte (titre, description, lieu, auteur)
+            if (!filters.query.isEmpty()) {
+                String q = filters.query.toLowerCase();
+                boolean match =
+                        (p.getTitle() != null && p.getTitle().toLowerCase().contains(q))
+                        || (p.getDescription() != null && p.getDescription().toLowerCase().contains(q))
+                        || (p.getLocationName() != null && p.getLocationName().toLowerCase().contains(q))
+                        || (p.getAuthorName() != null && p.getAuthorName().toLowerCase().contains(q));
+                if (!match) continue;
+            }
+            // Filtre type de lieu (insensible à la casse)
+            if (!filters.locationTypes.isEmpty()) {
+                if (p.getLocationType() == null) continue;
+                String pType = p.getLocationType().toLowerCase();
+                boolean typeMatch = false;
+                for (String t : filters.locationTypes) {
+                    if (t.toLowerCase().equals(pType)) { typeMatch = true; break; }
+                }
+                if (!typeMatch) continue;
+            }
+            // Filtre auteur
+            if (!filters.authorName.isEmpty()) {
+                if (p.getAuthorName() == null
+                        || !p.getAuthorName().toLowerCase()
+                                .contains(filters.authorName.toLowerCase())) continue;
+            }
+            // Filtre période
+            if (filters.dateFromMs > 0 || filters.dateToMs > 0) {
+                long photoMs = -1;
+                if (p.getCreatedAt() != null) {
+                    photoMs = p.getCreatedAt().toDate().getTime();
+                }
+                if (photoMs < 0) continue;
+                if (filters.dateFromMs > 0 && photoMs < filters.dateFromMs) continue;
+                if (filters.dateToMs   > 0 && photoMs > filters.dateToMs)   continue;
+            }
+            result.add(p);
+        }
+        return result;
     }
 
     private void loadPathsFromFirestore() {
@@ -135,12 +209,12 @@ public class ExploreFragment extends Fragment
                     FirestoreRepository.get().checkFavoritedPaths(paths, () -> {
                         if (!isAdded()) return;
                         pathAdapter1.setPaths(loadedPaths);
-                        pathAdapter2.setPaths(loadedPaths);
+                        pathAdapter2.setPaths(sortPathsByPopularity(loadedPaths));
                     });
                 });
             } else {
                 pathAdapter1.setPaths(loadedPaths);
-                pathAdapter2.setPaths(loadedPaths);
+                pathAdapter2.setPaths(sortPathsByPopularity(loadedPaths));
             }
         });
     }
