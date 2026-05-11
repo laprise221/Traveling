@@ -105,6 +105,16 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/nav_maneuver"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1976D2"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/nav_step_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

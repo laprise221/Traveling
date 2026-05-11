@@ -65,8 +65,11 @@ public class CreatePathFragment extends Fragment {
     private CheckBox cbPluie;
     private TextView tvMeteo;
     private TextView tvResume;
+    private TextView tvOptionsTitle;
+    private LinearLayout optionsContainer;
     private LinearLayout stepsContainer;
     private SwitchMaterial switchPublic;
+    private PathOption selectedOption;
 
     private final List<PathStep> steps = new ArrayList<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -95,6 +98,8 @@ public class CreatePathFragment extends Fragment {
         cbPluie = view.findViewById(R.id.cb_pluie);
         tvMeteo = view.findViewById(R.id.tv_meteo);
         tvResume = view.findViewById(R.id.tv_resume);
+        tvOptionsTitle = view.findViewById(R.id.tv_options_title);
+        optionsContainer = view.findViewById(R.id.options_container);
         stepsContainer = view.findViewById(R.id.steps_container);
         switchPublic = view.findViewById(R.id.switch_public);
         sliderBudget = view.findViewById(R.id.slider_budget);
@@ -344,67 +349,20 @@ public class CreatePathFragment extends Fragment {
                         sensibleChaleur, sensiblePluie, budget
                 );
 
-                // ---- ÉTAPE 5 : Sélectionner les étapes les plus éloignées entre elles ----
+                // ---- ÉTAPE 5 : Générer 3 options (économique, équilibré, confort) ----
                 Log.d("CreatePath", "Filtered POIs: " + filteredPOIs.size()
                         + ", radius: " + radius + "m, maxSteps: " + maxSteps);
 
-                List<PathStep> generatedSteps = new ArrayList<>();
-
-                // Ajouter le POI le mieux noté comme point de départ
-                for (int idx = 0; idx < filteredPOIs.size(); idx++) {
-                    JSONObject first = filteredPOIs.get(idx);
-                    if (!first.has("point") || !first.has("name") || first.getString("name").isEmpty())
-                        continue;
-                    JSONObject fp = first.getJSONObject("point");
-                    generatedSteps.add(new PathStep(first.getString("name"), "",
-                            fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null));
-                    filteredPOIs.remove(idx);
-                    break;
-                }
-
-                // Ajouter à chaque fois le POI le plus éloigné de tous ceux déjà sélectionnés
-                while (generatedSteps.size() < maxSteps && !filteredPOIs.isEmpty()) {
-                    double bestMinDist = -1;
-                    int bestIdx = -1;
-                    double bestLat = 0, bestLon = 0;
-                    String bestName = "";
-
-                    for (int i = 0; i < filteredPOIs.size(); i++) {
-                        JSONObject poi = filteredPOIs.get(i);
-                        if (!poi.has("point") || !poi.has("name") || poi.getString("name").isEmpty())
-                            continue;
-                        JSONObject pt = poi.getJSONObject("point");
-                        double pLat = pt.optDouble("lat", 0);
-                        double pLon = pt.optDouble("lon", 0);
-                        String pName = poi.getString("name");
-
-                        boolean sameName = false;
-                        for (PathStep s : generatedSteps) {
-                            if (s.getName().equals(pName)) { sameName = true; break; }
-                        }
-                        if (sameName) continue;
-
-                        double minDist = Double.MAX_VALUE;
-                        for (PathStep s : generatedSteps) {
-                            double d = distanceKm(s.getLatitude(), s.getLongitude(), pLat, pLon);
-                            if (d < minDist) minDist = d;
-                        }
-
-                        if (minDist > bestMinDist) {
-                            bestMinDist = minDist;
-                            bestIdx = i;
-                            bestLat = pLat;
-                            bestLon = pLon;
-                            bestName = pName;
-                        }
-                    }
-
-                    if (bestIdx == -1) break;
-
-                    Log.d("CreatePath", "AJOUTÉ: " + bestName + " (dist=" + String.format("%.3f", bestMinDist) + "km)");
-                    generatedSteps.add(new PathStep(bestName, "", bestLat, bestLon, null, null));
-                    filteredPOIs.remove(bestIdx);
-                }
+                List<PathOption> generatedOptions = new ArrayList<>();
+                generatedOptions.add(buildOption(
+                        "Économique", filteredPOIs,
+                        Math.max(2, maxSteps - 1), true, false, 8));
+                generatedOptions.add(buildOption(
+                        "Équilibré", filteredPOIs,
+                        maxSteps, false, false, 15));
+                generatedOptions.add(buildOption(
+                        "Confort", filteredPOIs,
+                        maxSteps + 1, false, true, 25));
 
                 // ---- ÉTAPE 6 : Construire le résumé ----
                 String meteoInfo;
@@ -419,31 +377,27 @@ public class CreatePathFragment extends Fragment {
                     if (!isAdded()) return;
                     btnGenerate.setEnabled(true);
 
-                    if (generatedSteps.isEmpty()) {
+                    List<PathOption> nonEmpty = new ArrayList<>();
+                    for (PathOption opt : generatedOptions) {
+                        if (!opt.steps.isEmpty()) nonEmpty.add(opt);
+                    }
+
+                    if (nonEmpty.isEmpty()) {
                         Toast.makeText(requireContext(),
                                 "Aucun lieu trouvé avec ces critères", Toast.LENGTH_SHORT).show();
                         return;
                     }
 
-                    // Afficher la météo
                     tvMeteo.setText("Météo : " + finalMeteoInfo);
                     tvMeteo.setVisibility(View.VISIBLE);
 
-                    // Afficher les résumés
-                    tvResume.setText(generatedSteps.size() + " étapes · ~"
-                            + dureeMax + "h · " + budget + "€ max · " + effort);
+                    tvResume.setText("Critères : ~" + dureeMax + "h · " + budget + "€ max · " + effort);
                     tvResume.setVisibility(View.VISIBLE);
 
-                    // Afficher les étapes
-                    steps.clear();
-                    stepsContainer.removeAllViews();
-                    for (PathStep step : generatedSteps) {
-                        steps.add(step);
-                        addStepView(step, steps.size());
-                    }
+                    displayOptions(nonEmpty, dureeMax);
 
                     Toast.makeText(requireContext(),
-                            generatedSteps.size() + " étapes générées " + finalMeteoInfo,
+                            nonEmpty.size() + " options proposées " + finalMeteoInfo,
                             Toast.LENGTH_SHORT).show();
                 });
 
@@ -528,12 +482,16 @@ public class CreatePathFragment extends Fragment {
         String difficulty = getSelectedChipText(chipGroupDifficulty);
         boolean isPublic = switchPublic.isChecked();
 
+        String pathType = selectedOption != null
+                ? selectedOption.name.toLowerCase()
+                : "équilibré";
+
         TravelPath path = new TravelPath(null, title, city, description,
                 "Moi", 0, 0,
                 duration,
                 budgetStr,
                 difficulty.isEmpty() ? "-" : difficulty,
-                "équilibré", steps.size(), 0, R.drawable.sample_path_1);
+                pathType, steps.size(), 0, R.drawable.sample_path_1);
         path.setPublic(isPublic);
         path.setSteps(new ArrayList<>(steps));
 
@@ -667,6 +625,146 @@ public class CreatePathFragment extends Fragment {
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    private static class PathOption {
+        final String name;
+        final List<PathStep> steps;
+        final double totalDistanceKm;
+        final int estimatedBudget;
+
+        PathOption(String name, List<PathStep> steps,
+                   double totalDistanceKm, int estimatedBudget) {
+            this.name = name;
+            this.steps = steps;
+            this.totalDistanceKm = totalDistanceKm;
+            this.estimatedBudget = estimatedBudget;
+        }
+    }
+
+    private PathOption buildOption(String name, List<JSONObject> pool, int maxSteps,
+                                   boolean excludeExpensive, boolean preferClose,
+                                   int costPerStep) throws JSONException {
+        List<JSONObject> pois = new ArrayList<>();
+        for (JSONObject poi : pool) {
+            if (excludeExpensive && poi.optInt("rate", 0) >= 3) continue;
+            pois.add(poi);
+        }
+
+        List<PathStep> picked = new ArrayList<>();
+
+        for (int idx = 0; idx < pois.size(); idx++) {
+            JSONObject first = pois.get(idx);
+            if (!first.has("point") || !first.has("name") || first.getString("name").isEmpty())
+                continue;
+            JSONObject fp = first.getJSONObject("point");
+            picked.add(new PathStep(first.getString("name"), "",
+                    fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null));
+            pois.remove(idx);
+            break;
+        }
+
+        while (picked.size() < maxSteps && !pois.isEmpty()) {
+            double bestScore = preferClose ? Double.MAX_VALUE : -1;
+            int bestIdx = -1;
+            double bestLat = 0, bestLon = 0;
+            String bestName = "";
+
+            for (int i = 0; i < pois.size(); i++) {
+                JSONObject poi = pois.get(i);
+                if (!poi.has("point") || !poi.has("name") || poi.getString("name").isEmpty())
+                    continue;
+                JSONObject pt = poi.getJSONObject("point");
+                double pLat = pt.optDouble("lat", 0);
+                double pLon = pt.optDouble("lon", 0);
+                String pName = poi.getString("name");
+
+                boolean sameName = false;
+                for (PathStep s : picked) {
+                    if (s.getName().equals(pName)) { sameName = true; break; }
+                }
+                if (sameName) continue;
+
+                double minDist = Double.MAX_VALUE;
+                for (PathStep s : picked) {
+                    double d = distanceKm(s.getLatitude(), s.getLongitude(), pLat, pLon);
+                    if (d < minDist) minDist = d;
+                }
+
+                boolean better = preferClose ? (minDist < bestScore) : (minDist > bestScore);
+                if (better) {
+                    bestScore = minDist;
+                    bestIdx = i;
+                    bestLat = pLat;
+                    bestLon = pLon;
+                    bestName = pName;
+                }
+            }
+
+            if (bestIdx == -1) break;
+            picked.add(new PathStep(bestName, "", bestLat, bestLon, null, null));
+            pois.remove(bestIdx);
+        }
+
+        double totalKm = 0;
+        for (int i = 1; i < picked.size(); i++) {
+            totalKm += distanceKm(
+                    picked.get(i - 1).getLatitude(), picked.get(i - 1).getLongitude(),
+                    picked.get(i).getLatitude(), picked.get(i).getLongitude());
+        }
+
+        int estBudget = picked.size() * costPerStep;
+        return new PathOption(name, picked, totalKm, estBudget);
+    }
+
+    private void displayOptions(List<PathOption> options, int dureeMax) {
+        optionsContainer.removeAllViews();
+        selectedOption = null;
+        steps.clear();
+        stepsContainer.removeAllViews();
+
+        tvOptionsTitle.setVisibility(View.VISIBLE);
+
+        for (PathOption option : options) {
+            View card = LayoutInflater.from(requireContext())
+                    .inflate(R.layout.item_path_option, optionsContainer, false);
+
+            TextView tvName = card.findViewById(R.id.tv_option_name);
+            TextView tvMetrics = card.findViewById(R.id.tv_option_metrics);
+            TextView tvSteps = card.findViewById(R.id.tv_option_steps);
+            com.google.android.material.button.MaterialButton btnSelect =
+                    card.findViewById(R.id.btn_option_select);
+
+            tvName.setText(option.name);
+            tvMetrics.setText(option.steps.size() + " étapes · ~"
+                    + String.format("%.1f", option.totalDistanceKm) + " km · ~"
+                    + option.estimatedBudget + " €");
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < option.steps.size(); i++) {
+                if (i > 0) sb.append(" → ");
+                sb.append(option.steps.get(i).getName());
+            }
+            tvSteps.setText(sb.toString());
+
+            btnSelect.setOnClickListener(v -> selectOption(option));
+            card.setOnClickListener(v -> selectOption(option));
+
+            optionsContainer.addView(card);
+        }
+    }
+
+    private void selectOption(PathOption option) {
+        selectedOption = option;
+        steps.clear();
+        stepsContainer.removeAllViews();
+        for (PathStep step : option.steps) {
+            steps.add(step);
+            addStepView(step, steps.size());
+        }
+        Toast.makeText(requireContext(),
+                "Parcours « " + option.name + " » sélectionné",
+                Toast.LENGTH_SHORT).show();
     }
 
     private String mapActivitesToKinds(List<String> activites) {
