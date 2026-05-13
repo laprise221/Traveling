@@ -121,7 +121,7 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="8dp"
                 android:hint="Description"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
@@ -135,6 +135,18 @@
                     android:gravity="top" />
 
             </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Bouton annotation IA -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_ai_annotate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginBottom="12dp"
+                android:text="✨ Annoter avec l'IA"
+                android:textSize="13sp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                app:cornerRadius="20dp" />
 
             <!-- Lieu -->
             <com.google.android.material.textfield.TextInputLayout

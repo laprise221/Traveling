@@ -44,6 +44,7 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
+import com.example.traveling.BuildConfig;
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.GroupRepository;
@@ -59,6 +60,8 @@ import com.google.firebase.auth.FirebaseUser;
 
 public class SharePhotoFragment extends Fragment {
 
+    private static final String GROQ_API_KEY = BuildConfig.GROQ_API_KEY;
+
     private ImageView ivPreview;
     private View pickPlaceholder;
     private com.google.android.material.textfield.TextInputEditText etTitle, etDescription;
@@ -71,6 +74,7 @@ public class SharePhotoFragment extends Fragment {
     private SwitchMaterial switchPublic;
     private LinearLayout layoutGroupCheckboxes;
     private TextView tvNoGroups;
+    private com.google.android.material.button.MaterialButton btnAiAnnotate;
 
     private Uri selectedImageUri = null;
     private Bitmap selectedBitmap = null;
@@ -137,6 +141,9 @@ public class SharePhotoFragment extends Fragment {
 
         layoutGroupCheckboxes = view.findViewById(R.id.layout_group_checkboxes);
         tvNoGroups = view.findViewById(R.id.tv_no_groups);
+
+        btnAiAnnotate = view.findViewById(R.id.btn_ai_annotate);
+        btnAiAnnotate.setOnClickListener(v -> annotateWithAI());
 
         FrameLayout photoZone = view.findViewById(R.id.photo_picker_zone);
         photoZone.setOnClickListener(v -> showImageSourceDialog());
@@ -390,6 +397,117 @@ public class SharePhotoFragment extends Fragment {
                         Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 });
+    }
+
+    private void annotateWithAI() {
+        if (selectedImageUri == null && selectedBitmap == null) {
+            Toast.makeText(requireContext(), "Veuillez d'abord choisir une photo", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
+        String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
+        String locationType = getSelectedLocationType();
+
+        String imageBase64;
+        if (selectedBitmap != null) {
+            imageBase64 = ImageUtils.bitmapToBase64(selectedBitmap);
+        } else {
+            imageBase64 = ImageUtils.uriToBase64(requireContext(), selectedImageUri);
+        }
+        if (imageBase64 == null) {
+            Toast.makeText(requireContext(), "Erreur lors du traitement de l'image", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        btnAiAnnotate.setEnabled(false);
+        btnAiAnnotate.setText("Génération en cours…");
+
+        final String imgB64 = imageBase64;
+        executor.execute(() -> {
+            try {
+                StringBuilder prompt = new StringBuilder();
+                prompt.append("Tu es un assistant de voyage. Génère une description courte et inspirante (2-3 phrases) pour cette photo de voyage.");
+                if (!title.isEmpty()) prompt.append(" Titre : \"").append(title).append("\".");
+                if (!location.isEmpty()) prompt.append(" Lieu : ").append(location).append(".");
+                if (!locationType.isEmpty()) prompt.append(" Type de lieu : ").append(locationType).append(".");
+                prompt.append(" Réponds uniquement avec la description, sans guillemets ni introduction.");
+
+                org.json.JSONObject textPart = new org.json.JSONObject();
+                textPart.put("type", "text");
+                textPart.put("text", prompt.toString());
+
+                org.json.JSONObject imageUrl = new org.json.JSONObject();
+                imageUrl.put("url", "data:image/jpeg;base64," + imgB64);
+
+                org.json.JSONObject imagePart = new org.json.JSONObject();
+                imagePart.put("type", "image_url");
+                imagePart.put("image_url", imageUrl);
+
+                org.json.JSONArray contentArray = new org.json.JSONArray();
+                contentArray.put(textPart);
+                contentArray.put(imagePart);
+
+                org.json.JSONObject message = new org.json.JSONObject();
+                message.put("role", "user");
+                message.put("content", contentArray);
+
+                org.json.JSONObject body = new org.json.JSONObject();
+                body.put("model", "meta-llama/llama-4-scout-17b-16e-instruct");
+                body.put("messages", new org.json.JSONArray().put(message));
+
+                java.net.URL url = new java.net.URL("https://api.groq.com/openai/v1/chat/completions");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + GROQ_API_KEY);
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(30000);
+                conn.setReadTimeout(30000);
+                conn.getOutputStream().write(body.toString().getBytes("UTF-8"));
+
+                int code = conn.getResponseCode();
+                java.io.InputStream stream = code == 200 ? conn.getInputStream() : conn.getErrorStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+
+                if (code != 200) {
+                    mainHandler.post(() -> {
+                        if (!isAdded()) return;
+                        resetAiButton();
+                        Toast.makeText(requireContext(), "Erreur IA (" + code + ")", Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+
+                String generated = new org.json.JSONObject(sb.toString())
+                        .getJSONArray("choices")
+                        .getJSONObject(0)
+                        .getJSONObject("message")
+                        .getString("content");
+
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    resetAiButton();
+                    etDescription.setText(generated.trim());
+                });
+
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    resetAiButton();
+                    Toast.makeText(requireContext(), "Erreur lors de la génération IA", Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+
+    private void resetAiButton() {
+        btnAiAnnotate.setEnabled(true);
+        btnAiAnnotate.setText("✨ Annoter avec l'IA");
     }
 
     private String getSelectedLocationType() {
