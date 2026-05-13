@@ -17,7 +17,10 @@
         android:layout_gravity="top|center_horizontal"
         android:layout_marginTop="16dp"
         app:cardCornerRadius="24dp"
-        app:cardElevation="6dp">
+        app:cardElevation="6dp"
+        app:cardBackgroundColor="@color/colorSurface"
+        app:strokeWidth="1dp"
+        app:strokeColor="@color/colorPrimaryLight">
 
         <RadioGroup
             android:id="@+id/filter_group_map"
@@ -35,6 +38,7 @@
                 android:button="@null"
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="8dp"
+                android:textColor="@color/colorTextPrimary"
                 android:background="?attr/selectableItemBackgroundBorderless" />
 
             <RadioButton
@@ -45,6 +49,7 @@
                 android:button="@null"
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="8dp"
+                android:textColor="@color/colorTextPrimary"
                 android:background="?attr/selectableItemBackgroundBorderless" />
 
             <RadioButton
@@ -55,10 +60,110 @@
                 android:button="@null"
                 android:paddingHorizontal="16dp"
                 android:paddingVertical="8dp"
+                android:textColor="@color/colorTextPrimary"
                 android:background="?attr/selectableItemBackgroundBorderless" />
 
         </RadioGroup>
 
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Carte aperçu (visible au clic sur un pin) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/pin_preview_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="10dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="@color/colorPrimaryLight"
+        app:cardBackgroundColor="@color/colorSurface">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="14dp"
+            android:gravity="center_vertical">
+
+            <!-- Image miniature arrondie -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp">
+
+                <ImageView
+                    android:id="@+id/pin_preview_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:contentDescription="@null" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="14dp">
+
+                <TextView
+                    android:id="@+id/pin_preview_type"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="11sp"
+                    android:textColor="@color/colorPrimary"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+
+                <TextView
+                    android:id="@+id/pin_preview_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/pin_preview_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextSecondary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+            </LinearLayout>
+
+            <!-- Flèche de navigation -->
+            <LinearLayout
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:gravity="center"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_icon_circle">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@android:drawable/ic_media_next"
+                    app:tint="@color/colorPrimary"
+                    android:contentDescription="@null" />
+
+            </LinearLayout>
+
+        </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
     <!-- Overlay navigation parcours actif -->
@@ -72,7 +177,8 @@
         app:cardCornerRadius="20dp"
         app:cardElevation="8dp"
         app:strokeWidth="1dp"
-        app:strokeColor="@color/colorPrimaryLight">
+        app:strokeColor="@color/colorPrimaryLight"
+        app:cardBackgroundColor="@color/colorSurface">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -93,6 +199,7 @@
                     android:layout_weight="1"
                     android:textSize="16sp"
                     android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary"
                     android:maxLines="1"
                     android:ellipsize="end" />
 
@@ -102,19 +209,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Arrêter"
-                    android:textColor="#D32F2F"
+                    android:textColor="@color/colorError"
                     android:textAllCaps="false" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/nav_maneuver"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/colorPrimary"
-                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/nav_step_label"
@@ -122,7 +219,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textSize="12sp"
-                android:textColor="?android:attr/textColorSecondary" />
+                android:textColor="@color/colorTextSecondary" />
 
             <TextView
                 android:id="@+id/nav_next_step"
@@ -130,55 +227,73 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_metric_row"
+                android:padding="10dp"
                 android:orientation="horizontal">
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:gravity="center">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Distance"
-                        android:textSize="11sp"
-                        android:textColor="?android:attr/textColorSecondary" />
+                        android:text="DISTANCE"
+                        android:textSize="10sp"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/colorPrimary" />
 
                     <TextView
                         android:id="@+id/nav_distance"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:textSize="16sp"
                         android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
                         android:text="--" />
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:background="@color/colorPrimaryMedium"
+                    android:alpha="0.4"
+                    android:layout_gravity="center_vertical" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:gravity="center">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Temps restant"
-                        android:textSize="11sp"
-                        android:textColor="?android:attr/textColorSecondary" />
+                        android:text="TEMPS"
+                        android:textSize="10sp"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/colorPrimary" />
 
                     <TextView
                         android:id="@+id/nav_time"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:textSize="16sp"
                         android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary"
                         android:text="--" />
                 </LinearLayout>
             </LinearLayout>
