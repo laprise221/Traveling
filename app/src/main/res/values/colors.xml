@@ -2,7 +2,31 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="colorPrimary">#FF1E88E5</color>
-    <color name="colorPrimaryDark">#FF1565C0</color>
-    <color name="colorAccent">#FFFF7043</color>
+
+    <!-- Primary — Electric Indigo -->
+    <color name="colorPrimary">#5B5CF6</color>
+    <color name="colorPrimaryDark">#4338CA</color>
+    <color name="colorPrimaryLight">#EEF2FF</color>
+    <color name="colorPrimaryMedium">#818CF8</color>
+
+    <!-- Secondary/Accent — Warm Amber -->
+    <color name="colorSecondary">#F59E0B</color>
+    <color name="colorAccent">#F59E0B</color>
+    <color name="colorAccentDark">#D97706</color>
+    <color name="colorAccentLight">#FEF3C7</color>
+
+    <!-- Surfaces -->
+    <color name="colorBackground">#F5F5FF</color>
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorSurfaceVariant">#F0EDFF</color>
+
+    <!-- Text -->
+    <color name="colorTextPrimary">#1E1B4B</color>
+    <color name="colorTextSecondary">#6B7280</color>
+    <color name="colorTextHint">#9CA3AF</color>
+
+    <!-- Utility -->
+    <color name="colorDivider">#E5E7EB</color>
+    <color name="colorSuccess">#10B981</color>
+    <color name="colorError">#EF4444</color>
 </resources>

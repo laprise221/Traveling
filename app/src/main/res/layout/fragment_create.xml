@@ -5,39 +5,169 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:padding="32dp">
+    android:background="@color/colorBackground"
+    android:padding="24dp">
+
+    <!-- Titre section -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Créer"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="@color/colorTextPrimary"
+        android:letterSpacing="-0.02"
+        android:layout_marginBottom="8dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Que souhaitez-vous créer ?"
-        android:textSize="22sp"
-        android:textStyle="bold"
+        android:text="Que souhaitez-vous partager ?"
+        android:textSize="15sp"
+        android:textColor="@color/colorTextSecondary"
         android:layout_marginBottom="40dp" />
 
-    <!-- Publier une photo (TravelShare) -->
-    <com.google.android.material.button.MaterialButton
+    <!-- Carte : Partager une photo -->
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/btn_share_photo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Partager une photo"
-        android:textSize="16sp"
-        app:icon="@android:drawable/ic_menu_camera"
-        app:iconGravity="start"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_marginBottom="16dp"
-        android:padding="16dp" />
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="3dp"
+        app:strokeWidth="1.5dp"
+        app:strokeColor="@color/colorPrimaryLight"
+        app:cardBackgroundColor="@color/colorSurface">
 
-    <!-- Créer un parcours (TravelPath) -->
-    <com.google.android.material.button.MaterialButton
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="20dp">
+
+            <!-- Icône dans cercle coloré -->
+            <LinearLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:gravity="center"
+                android:background="@drawable/bg_icon_circle">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@android:drawable/ic_menu_camera"
+                    app:tint="@color/colorPrimary"
+                    android:contentDescription="@null" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Partager une photo"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Partagez un lieu que vous avez découvert"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextSecondary" />
+
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/ic_media_next"
+                app:tint="@color/colorPrimaryMedium"
+                android:contentDescription="@null" />
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Carte : Créer un parcours -->
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/btn_create_path"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Créer un parcours"
-        android:textSize="16sp"
-        app:icon="@android:drawable/ic_menu_directions"
-        app:iconGravity="start"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:padding="16dp" />
+        android:clickable="true"
+        android:focusable="true"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="3dp"
+        app:strokeWidth="1.5dp"
+        app:strokeColor="@color/colorAccentLight"
+        app:cardBackgroundColor="@color/colorSurface">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="20dp">
+
+            <!-- Icône dans cercle coloré amber -->
+            <LinearLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:gravity="center"
+                android:background="@drawable/bg_icon_circle_amber">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@android:drawable/ic_menu_directions"
+                    app:tint="@color/colorAccent"
+                    android:contentDescription="@null" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Créer un parcours"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Créez un itinéraire étape par étape"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextSecondary" />
+
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/ic_media_next"
+                app:tint="@color/colorAccentDark"
+                android:contentDescription="@null" />
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>
