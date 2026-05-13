@@ -10,12 +10,30 @@ import android.provider.MediaStore;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.CheckBox;
+import android.widget.Filter;
+
+import java.util.ArrayList;
+import java.util.List;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -35,18 +53,20 @@ import com.example.traveling.model.Photo;
 import com.example.traveling.session.SessionManager;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.android.material.textfield.TextInputEditText;
+import com.example.traveling.data.GeocodingUtils;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class SharePhotoFragment extends Fragment {
 
     private ImageView ivPreview;
     private View pickPlaceholder;
-    private TextInputEditText etTitle, etDescription, etLocation;
+    private com.google.android.material.textfield.TextInputEditText etTitle, etDescription;
+    private AutoCompleteTextView etLocation;
+    private ArrayAdapter<String> locationAdapter;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingLocationSearch;
     private ChipGroup chipGroupType;
     private SwitchMaterial switchPublic;
     private LinearLayout layoutGroupCheckboxes;
@@ -111,6 +131,7 @@ public class SharePhotoFragment extends Fragment {
         etTitle = view.findViewById(R.id.et_title);
         etDescription = view.findViewById(R.id.et_description);
         etLocation = view.findViewById(R.id.et_location);
+        setupLocationAutocomplete();
         chipGroupType = view.findViewById(R.id.chip_group_type);
         switchPublic = view.findViewById(R.id.switch_public);
 
@@ -129,6 +150,88 @@ public class SharePhotoFragment extends Fragment {
         } else {
             tvNoGroups.setText("Connectez-vous pour partager dans un groupe");
         }
+    }
+
+    private void setupLocationAutocomplete() {
+        locationAdapter = new ArrayAdapter<String>(requireContext(),
+                android.R.layout.simple_dropdown_item_1line, new ArrayList<>()) {
+            @Override
+            public Filter getFilter() {
+                return new Filter() {
+                    @Override
+                    protected Filter.FilterResults performFiltering(CharSequence constraint) {
+                        Filter.FilterResults r = new Filter.FilterResults();
+                        List<String> all = new ArrayList<>();
+                        for (int i = 0; i < getCount(); i++) all.add(getItem(i));
+                        r.values = all;
+                        r.count = all.size();
+                        return r;
+                    }
+                    @Override
+                    protected void publishResults(CharSequence constraint, Filter.FilterResults results) {
+                        notifyDataSetChanged();
+                    }
+                };
+            }
+        };
+        etLocation.setAdapter(locationAdapter);
+        etLocation.setThreshold(2);
+
+        etLocation.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (pendingLocationSearch != null) mainHandler.removeCallbacks(pendingLocationSearch);
+                String query = s.toString().trim();
+                if (query.length() < 2) return;
+                pendingLocationSearch = () -> searchLocations(query);
+                mainHandler.postDelayed(pendingLocationSearch, 350);
+            }
+        });
+    }
+
+    private void searchLocations(String query) {
+        executor.execute(() -> {
+            try {
+                String encoded = URLEncoder.encode(query, "UTF-8");
+                String urlStr = "https://nominatim.openstreetmap.org/search?q=" + encoded
+                        + "&format=json&addressdetails=1&limit=5&accept-language=fr";
+
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+
+                if (conn.getResponseCode() != 200) return;
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+
+                org.json.JSONArray results = new org.json.JSONArray(sb.toString());
+                List<String> places = new ArrayList<>();
+                for (int i = 0; i < results.length(); i++) {
+                    org.json.JSONObject item = results.getJSONObject(i);
+                    String displayName = item.getString("display_name");
+                    String[] parts = displayName.split(",");
+                    String placeName = parts[0].trim();
+                    if (parts.length > 1) placeName = placeName + ", " + parts[parts.length - 1].trim();
+                    if (!places.contains(placeName)) places.add(placeName);
+                }
+
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    locationAdapter.clear();
+                    locationAdapter.addAll(places);
+                    locationAdapter.notifyDataSetChanged();
+                    if (!places.isEmpty() && etLocation.hasFocus()) etLocation.showDropDown();
+                });
+            } catch (Exception ignored) {}
+        });
     }
 
     private void loadUserGroups() {
@@ -251,6 +354,22 @@ public class SharePhotoFragment extends Fragment {
         // Disable publish button to prevent double-tap
         requireView().findViewById(R.id.btn_publish).setEnabled(false);
 
+        // Géocodage du lieu avant sauvegarde
+        GeocodingUtils.geocode(location, new GeocodingUtils.GeocodingCallback() {
+            @Override
+            public void onResult(double latitude, double longitude) {
+                photo.setLatitude(latitude);
+                photo.setLongitude(longitude);
+                savePhoto(photo);
+            }
+            @Override
+            public void onFailure() {
+                savePhoto(photo); // sauvegarde sans coordonnées si échec
+            }
+        });
+    }
+
+    private void savePhoto(Photo photo) {
         // Save to Firestore
         FirestoreRepository.get().savePhoto(photo,
                 photoId -> {

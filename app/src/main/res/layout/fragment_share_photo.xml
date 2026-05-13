@@ -145,12 +145,13 @@
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 app:startIconDrawable="@android:drawable/ic_menu_mylocation">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <AutoCompleteTextView
                     android:id="@+id/et_location"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="textCapWords"
-                    android:imeOptions="actionDone" />
+                    android:imeOptions="actionDone"
+                    android:completionThreshold="2" />
 
             </com.google.android.material.textfield.TextInputLayout>
 

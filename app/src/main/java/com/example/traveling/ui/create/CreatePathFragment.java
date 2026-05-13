@@ -21,6 +21,7 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.data.GeocodingUtils;
 import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.UserRepository;
 import com.example.traveling.model.PathStep;
@@ -73,6 +74,8 @@ public class CreatePathFragment extends Fragment {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private ArrayAdapter<String> cityAdapter;
     private Runnable pendingSearch;
+    private double geocodedLat = 0;
+    private double geocodedLon = 0;
 
     @Nullable
     @Override
@@ -122,83 +125,91 @@ public class CreatePathFragment extends Fragment {
     }
 
     private void setupCityAutocomplete() {
-        cityAdapter = new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_dropdown_item_1line, new ArrayList<>());
+        cityAdapter = buildNoFilterAdapter();
         etCity.setAdapter(cityAdapter);
+        etCity.setThreshold(2);
 
         etCity.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
-
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override
             public void afterTextChanged(Editable s) {
-                if (pendingSearch != null) {
-                    mainHandler.removeCallbacks(pendingSearch);
-                }
+                if (pendingSearch != null) mainHandler.removeCallbacks(pendingSearch);
                 String query = s.toString().trim();
                 if (query.length() < 2) return;
-
-                pendingSearch = () -> searchCities(query);
-                mainHandler.postDelayed(pendingSearch, 300);
+                pendingSearch = () -> searchCities(query, etCity, cityAdapter);
+                mainHandler.postDelayed(pendingSearch, 350);
             }
         });
     }
 
-    private void searchCities(String query) {
+    private ArrayAdapter<String> buildNoFilterAdapter() {
+        return new ArrayAdapter<String>(requireContext(),
+                android.R.layout.simple_dropdown_item_1line, new ArrayList<>()) {
+            @Override
+            public android.widget.Filter getFilter() {
+                return new android.widget.Filter() {
+                    @Override
+                    protected android.widget.Filter.FilterResults performFiltering(CharSequence constraint) {
+                        android.widget.Filter.FilterResults r = new android.widget.Filter.FilterResults();
+                        List<String> all = new ArrayList<>();
+                        for (int i = 0; i < getCount(); i++) all.add(getItem(i));
+                        r.values = all;
+                        r.count = all.size();
+                        return r;
+                    }
+                    @Override
+                    protected void publishResults(CharSequence constraint, android.widget.Filter.FilterResults results) {
+                        notifyDataSetChanged();
+                    }
+                };
+            }
+        };
+    }
+
+    private void searchCities(String query, AutoCompleteTextView field, ArrayAdapter<String> adapter) {
         executor.execute(() -> {
             try {
                 String encoded = URLEncoder.encode(query, "UTF-8");
                 String urlStr = "https://nominatim.openstreetmap.org/search?q=" + encoded
-                        + "&format=json&addressdetails=1&limit=5"
-                        + "&featuretype=city&accept-language=fr";
+                        + "&format=json&addressdetails=1&limit=5&accept-language=fr";
 
                 URL url = new URL(urlStr);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
 
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(conn.getInputStream()));
+                if (conn.getResponseCode() != 200) return;
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder sb = new StringBuilder();
                 String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line);
-                }
+                while ((line = reader.readLine()) != null) sb.append(line);
                 reader.close();
 
                 JSONArray results = new JSONArray(sb.toString());
                 List<String> cities = new ArrayList<>();
-
                 for (int i = 0; i < results.length(); i++) {
                     JSONObject item = results.getJSONObject(i);
                     String displayName = item.getString("display_name");
                     String[] parts = displayName.split(",");
                     String cityName = parts[0].trim();
                     if (parts.length > 1) {
-                        String country = parts[parts.length - 1].trim();
-                        cityName = cityName + ", " + country;
+                        cityName = cityName + ", " + parts[parts.length - 1].trim();
                     }
-                    if (!cities.contains(cityName)) {
-                        cities.add(cityName);
-                    }
+                    if (!cities.contains(cityName)) cities.add(cityName);
                 }
 
                 mainHandler.post(() -> {
                     if (!isAdded()) return;
-                    cityAdapter.clear();
-                    cityAdapter.addAll(cities);
-                    cityAdapter.notifyDataSetChanged();
-                    if (!cities.isEmpty() && etCity.hasFocus()) {
-                        etCity.showDropDown();
-                    }
+                    adapter.clear();
+                    adapter.addAll(cities);
+                    adapter.notifyDataSetChanged();
+                    if (!cities.isEmpty() && field.hasFocus()) field.showDropDown();
                 });
-
             } catch (Exception e) {
-                // Silently ignore network errors
+                Log.e("CreatePath", "City search failed", e);
             }
         });
     }
@@ -529,7 +540,7 @@ public class CreatePathFragment extends Fragment {
         boolean isPublic = switchPublic.isChecked();
 
         TravelPath path = new TravelPath(null, title, city, description,
-                "Moi", 0, 0,
+                "Moi", geocodedLat, geocodedLon,
                 duration,
                 budgetStr,
                 difficulty.isEmpty() ? "-" : difficulty,
@@ -540,6 +551,22 @@ public class CreatePathFragment extends Fragment {
         View btnPublish = requireView().findViewById(R.id.btn_publish);
         btnPublish.setEnabled(false);
 
+        TravelPath finalPath = path;
+        GeocodingUtils.geocode(city, new GeocodingUtils.GeocodingCallback() {
+            @Override
+            public void onResult(double latitude, double longitude) {
+                finalPath.setStartLatitude(latitude);
+                finalPath.setStartLongitude(longitude);
+                savePath(finalPath, btnPublish);
+            }
+            @Override
+            public void onFailure() {
+                savePath(finalPath, btnPublish);
+            }
+        });
+    }
+
+    private void savePath(TravelPath path, View btnPublish) {
         Log.d("CreatePath", "Saving path to Firestore...");
         PathRepository.get().savePath(path)
                 .addOnSuccessListener(docRef -> {

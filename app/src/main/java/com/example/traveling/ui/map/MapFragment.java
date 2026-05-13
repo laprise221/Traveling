@@ -16,6 +16,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,10 +25,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
 import com.example.traveling.data.ActivePathRegistry;
-import com.example.traveling.data.SampleData;
+import com.example.traveling.data.FirestoreRepository;
+import com.example.traveling.data.PathRegistry;
+import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.PathStep;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
@@ -37,10 +41,12 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.osmdroid.config.Configuration;
 import org.osmdroid.config.IConfigurationProvider;
+import org.osmdroid.events.MapEventsReceiver;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.BoundingBox;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.MapEventsOverlay;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polyline;
 
@@ -63,14 +69,26 @@ public class MapFragment extends Fragment implements LocationListener {
     private MapView mapView;
     private RadioGroup filterGroup;
 
-    private List<Photo> photos;
-    private List<TravelPath> paths;
+    private List<Photo> photos = new ArrayList<>();
+    private List<TravelPath> paths = new ArrayList<>();
 
     private List<Marker> photoMarkers = new ArrayList<>();
     private List<Marker> pathMarkers = new ArrayList<>();
 
+    // Navigation overlay (parcours actif)
     private MaterialCardView navOverlay;
     private TextView navPathTitle, navStepLabel, navNextStep, navDistance, navTime;
+
+    // Preview card (aperçu au clic sur pin)
+    private MaterialCardView pinPreviewCard;
+    private ImageView pinPreviewImage;
+    private TextView pinPreviewType, pinPreviewTitle, pinPreviewSubtitle;
+    private Photo selectedPhoto = null;
+    private TravelPath selectedPath = null;
+
+    // Filtre courant
+    private boolean showPhotos = true;
+    private boolean showPaths = true;
 
     private LocationManager locationManager;
     private Marker userMarker;
@@ -111,36 +129,188 @@ public class MapFragment extends Fragment implements LocationListener {
         navDistance = view.findViewById(R.id.nav_distance);
         navTime = view.findViewById(R.id.nav_time);
 
+        pinPreviewCard = view.findViewById(R.id.pin_preview_card);
+        pinPreviewImage = view.findViewById(R.id.pin_preview_image);
+        pinPreviewType = view.findViewById(R.id.pin_preview_type);
+        pinPreviewTitle = view.findViewById(R.id.pin_preview_title);
+        pinPreviewSubtitle = view.findViewById(R.id.pin_preview_subtitle);
+
         view.findViewById(R.id.btn_stop_path).setOnClickListener(v -> stopActivePath());
+        pinPreviewCard.setOnClickListener(v -> navigateToSelectedDetail());
 
         mapView.setTileSource(TileSourceFactory.MAPNIK);
         mapView.setMultiTouchControls(true);
         mapView.getController().setZoom(5.0);
         mapView.getController().setCenter(new GeoPoint(46.0, 2.0));
 
-        photos = SampleData.getSamplePhotos();
-        paths = SampleData.getSamplePaths();
+        // Ferme l'aperçu quand on tape sur la carte vide
+        MapEventsOverlay eventsOverlay = new MapEventsOverlay(new MapEventsReceiver() {
+            @Override
+            public boolean singleTapConfirmedHelper(GeoPoint p) {
+                hidePinPreview();
+                return false;
+            }
 
-        createPhotoMarkers();
-        createPathMarkers();
-
-        filterGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.filter_all) {
-                showMarkers(true, true);
-            } else if (checkedId == R.id.filter_photos) {
-                showMarkers(true, false);
-            } else if (checkedId == R.id.filter_paths) {
-                showMarkers(false, true);
+            @Override
+            public boolean longPressHelper(GeoPoint p) {
+                return false;
             }
         });
+        mapView.getOverlays().add(0, eventsOverlay);
 
-        showMarkers(true, true);
+        filterGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            hidePinPreview();
+            if (checkedId == R.id.filter_all) {
+                showPhotos = true;
+                showPaths = true;
+            } else if (checkedId == R.id.filter_photos) {
+                showPhotos = true;
+                showPaths = false;
+            } else if (checkedId == R.id.filter_paths) {
+                showPhotos = false;
+                showPaths = true;
+            }
+            showMarkers(showPhotos, showPaths);
+        });
+
+        loadDataFromFirestore();
         requestLocationPermission();
 
         if (ActivePathRegistry.isActive()) {
             startActivePathNavigation();
         }
     }
+
+    // ---------- Chargement des données Firestore ----------
+
+    private void loadDataFromFirestore() {
+        FirestoreRepository.get().loadPublicPhotos(photoList -> {
+            if (!isAdded()) return;
+            photos = photoList != null ? photoList : new ArrayList<>();
+            rebuildPhotoMarkers();
+            showMarkers(showPhotos, showPaths);
+        });
+
+        FirestoreRepository.get().loadPublicPaths(pathList -> {
+            if (!isAdded()) return;
+            paths = pathList != null ? pathList : new ArrayList<>();
+            rebuildPathMarkers();
+            showMarkers(showPhotos, showPaths);
+        });
+    }
+
+    // ---------- Aperçu du pin ----------
+
+    private void showPhotoPreview(Photo photo) {
+        pinPreviewType.setText("PHOTO · " + photo.getLocationType().toUpperCase());
+        pinPreviewTitle.setText(photo.getTitle());
+        pinPreviewSubtitle.setText(photo.getLocationName() + "  ·  " + photo.getLikeCount() + " likes");
+        setPreviewImage(photo.getImageBitmap() != null ? null : null, photo);
+        pinPreviewCard.setVisibility(View.VISIBLE);
+    }
+
+    private void setPreviewImage(Object ignored, Photo photo) {
+        if (photo.getImageBitmap() != null) {
+            pinPreviewImage.setImageBitmap(photo.getImageBitmap());
+        } else if (photo.getImageUri() != null) {
+            pinPreviewImage.setImageURI(photo.getImageUri());
+        } else if (photo.getImageResId() != 0) {
+            pinPreviewImage.setImageResource(photo.getImageResId());
+        } else {
+            pinPreviewImage.setImageResource(R.drawable.ic_marker_photo);
+        }
+    }
+
+    private void showPathPreview(TravelPath path) {
+        pinPreviewType.setText("PARCOURS · " + path.getCity().toUpperCase());
+        pinPreviewTitle.setText(path.getTitle());
+        pinPreviewSubtitle.setText(path.getDuration() + "  ·  " + path.getDifficulty() + "  ·  " + path.getLikeCount() + " likes");
+        if (path.getImageResId() != 0) {
+            pinPreviewImage.setImageResource(path.getImageResId());
+        } else {
+            pinPreviewImage.setImageResource(R.drawable.ic_marker_path);
+        }
+        pinPreviewCard.setVisibility(View.VISIBLE);
+    }
+
+    private void hidePinPreview() {
+        pinPreviewCard.setVisibility(View.GONE);
+        selectedPhoto = null;
+        selectedPath = null;
+    }
+
+    private void navigateToSelectedDetail() {
+        if (selectedPhoto != null) {
+            PhotoRegistry.set(selectedPhoto);
+            Navigation.findNavController(requireView())
+                    .navigate(R.id.action_map_to_photo_detail);
+        } else if (selectedPath != null) {
+            PathRegistry.set(selectedPath);
+            Navigation.findNavController(requireView())
+                    .navigate(R.id.action_map_to_path_detail);
+        }
+    }
+
+    // ---------- Création des markers ----------
+
+    private void rebuildPhotoMarkers() {
+        for (Marker m : photoMarkers) mapView.getOverlays().remove(m);
+        photoMarkers.clear();
+
+        for (Photo photo : photos) {
+            if (photo.getLatitude() == 0 && photo.getLongitude() == 0) continue;
+
+            Marker marker = new Marker(mapView);
+            marker.setPosition(new GeoPoint(photo.getLatitude(), photo.getLongitude()));
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+            Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_marker_photo);
+            if (icon != null) marker.setIcon(icon);
+
+            marker.setOnMarkerClickListener((m, mv) -> {
+                selectedPhoto = photo;
+                selectedPath = null;
+                showPhotoPreview(photo);
+                return true;
+            });
+            photoMarkers.add(marker);
+        }
+    }
+
+    private void rebuildPathMarkers() {
+        for (Marker m : pathMarkers) mapView.getOverlays().remove(m);
+        pathMarkers.clear();
+
+        for (TravelPath path : paths) {
+            if (path.getStartLatitude() == 0 && path.getStartLongitude() == 0) continue;
+
+            Marker marker = new Marker(mapView);
+            marker.setPosition(new GeoPoint(path.getStartLatitude(), path.getStartLongitude()));
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+            Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_marker_path);
+            if (icon != null) marker.setIcon(icon);
+
+            marker.setOnMarkerClickListener((m, mv) -> {
+                selectedPath = path;
+                selectedPhoto = null;
+                showPathPreview(path);
+                return true;
+            });
+            pathMarkers.add(marker);
+        }
+    }
+
+    private void showMarkers(boolean showPhotoMarkers, boolean showPathMarkers) {
+        for (Marker m : photoMarkers) mapView.getOverlays().remove(m);
+        for (Marker m : pathMarkers) mapView.getOverlays().remove(m);
+
+        if (showPhotoMarkers) mapView.getOverlays().addAll(photoMarkers);
+        if (showPathMarkers) mapView.getOverlays().addAll(pathMarkers);
+        mapView.invalidate();
+    }
+
+    // ---------- Parcours actif ----------
 
     @Override
     public void onResume() {
@@ -161,12 +331,11 @@ public class MapFragment extends Fragment implements LocationListener {
         stopLocationUpdates();
     }
 
-    // ---------- Parcours actif ----------
-
     private void startActivePathNavigation() {
         TravelPath path = ActivePathRegistry.getActivePath();
         if (path == null) return;
 
+        hidePinPreview();
         navOverlay.setVisibility(View.VISIBLE);
         navPathTitle.setText(path.getTitle());
 
@@ -295,7 +464,6 @@ public class MapFragment extends Fragment implements LocationListener {
                     }
                 }
 
-                // Fallback : ligne droite
                 if (routePoints.isEmpty()) {
                     for (PathStep s : validSteps) {
                         routePoints.add(new GeoPoint(s.getLatitude(), s.getLongitude()));
@@ -307,7 +475,7 @@ public class MapFragment extends Fragment implements LocationListener {
                     if (!isAdded()) return;
                     activeRoutePolyline = new Polyline(mapView);
                     activeRoutePolyline.setPoints(finalPoints);
-                    activeRoutePolyline.getOutlinePaint().setColor(Color.parseColor("#1976D2"));
+                    activeRoutePolyline.getOutlinePaint().setColor(Color.parseColor("#5B5CF6"));
                     activeRoutePolyline.getOutlinePaint().setStrokeWidth(10f);
                     activeRoutePolyline.getOutlinePaint().setAntiAlias(true);
                     mapView.getOverlayManager().add(0, activeRoutePolyline);
@@ -388,8 +556,7 @@ public class MapFragment extends Fragment implements LocationListener {
         }
 
         PathStep target = steps.get(idx);
-        navStepLabel.setText("Étape " + (idx + 1) + "/" + steps.size()
-                + " · Prochaine destination :");
+        navStepLabel.setText("Étape " + (idx + 1) + "/" + steps.size() + " · Prochaine destination :");
         navNextStep.setText(target.getName());
 
         if (userPos == null) {
@@ -444,63 +611,6 @@ public class MapFragment extends Fragment implements LocationListener {
         long h = (long) (minutes / 60);
         long m = Math.round(minutes - h * 60);
         return h + " h " + m + " min";
-    }
-
-    // ---------- Markers existants ----------
-
-    private void createPhotoMarkers() {
-        for (Photo photo : photos) {
-            Marker marker = new Marker(mapView);
-            marker.setPosition(new GeoPoint(photo.getLatitude(), photo.getLongitude()));
-            marker.setTitle(photo.getTitle());
-            marker.setSnippet(photo.getLocationName() + "\n" + photo.getAuthor());
-            marker.setSubDescription("Likes: " + photo.getLikeCount());
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
-            Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_marker_photo);
-            if (icon != null) marker.setIcon(icon);
-
-            marker.setOnMarkerClickListener((m, mv) -> {
-                Toast.makeText(requireContext(),
-                        photo.getTitle() + "\n" + photo.getLocationName(),
-                        Toast.LENGTH_SHORT).show();
-                m.showInfoWindow();
-                return true;
-            });
-            photoMarkers.add(marker);
-        }
-    }
-
-    private void createPathMarkers() {
-        for (TravelPath path : paths) {
-            Marker marker = new Marker(mapView);
-            marker.setPosition(new GeoPoint(path.getStartLatitude(), path.getStartLongitude()));
-            marker.setTitle(path.getTitle());
-            marker.setSnippet(path.getCity() + " | " + path.getDuration() + " | " + path.getBudget());
-            marker.setSubDescription(path.getType() + " - " + path.getDifficulty());
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
-            Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_marker_path);
-            if (icon != null) marker.setIcon(icon);
-
-            marker.setOnMarkerClickListener((m, mv) -> {
-                Toast.makeText(requireContext(),
-                        path.getTitle() + " - " + path.getCity(),
-                        Toast.LENGTH_SHORT).show();
-                m.showInfoWindow();
-                return true;
-            });
-            pathMarkers.add(marker);
-        }
-    }
-
-    private void showMarkers(boolean showPhotos, boolean showPaths) {
-        for (Marker m : photoMarkers) mapView.getOverlays().remove(m);
-        for (Marker m : pathMarkers) mapView.getOverlays().remove(m);
-
-        if (showPhotos) mapView.getOverlays().addAll(photoMarkers);
-        if (showPaths) mapView.getOverlays().addAll(pathMarkers);
-        mapView.invalidate();
     }
 
     private void requestLocationPermission() {

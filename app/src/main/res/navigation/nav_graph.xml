@@ -15,7 +15,14 @@
         android:id="@+id/navigation_map"
         android:name="com.example.traveling.ui.map.MapFragment"
         android:label="Carte"
-        tools:layout="@layout/fragment_map" />
+        tools:layout="@layout/fragment_map">
+        <action
+            android:id="@+id/action_map_to_photo_detail"
+            app:destination="@id/navigation_photo_detail" />
+        <action
+            android:id="@+id/action_map_to_path_detail"
+            app:destination="@id/navigation_path_detail" />
+    </fragment>
 
     <fragment
         android:id="@+id/navigation_create"
