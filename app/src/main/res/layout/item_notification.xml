@@ -1,35 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/notif_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="14dp"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="14dp"
     android:gravity="center_vertical"
     android:background="?attr/selectableItemBackground"
     android:clickable="true"
     android:focusable="true">
 
-    <ImageView
-        android:id="@+id/notif_icon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:src="@android:drawable/ic_popup_reminder"
-        android:contentDescription="@null" />
+    <!-- Icône dans cercle -->
+    <LinearLayout
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:gravity="center"
+        android:background="@drawable/bg_icon_circle">
+
+        <ImageView
+            android:id="@+id/notif_icon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:src="@android:drawable/ic_popup_reminder"
+            app:tint="@color/colorPrimary"
+            android:contentDescription="@null" />
+
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:layout_marginStart="12dp">
+        android:layout_marginStart="14dp">
 
         <TextView
             android:id="@+id/notif_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="14sp"
-            android:textColor="@android:color/black"
+            android:textColor="@color/colorTextPrimary"
             android:maxLines="2"
             android:ellipsize="end" />
 
@@ -37,9 +49,9 @@
             android:id="@+id/notif_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
+            android:layout_marginTop="4dp"
             android:textSize="11sp"
-            android:textColor="#999999" />
+            android:textColor="@color/colorTextHint" />
 
     </LinearLayout>
 
@@ -47,7 +59,7 @@
         android:id="@+id/notif_unread_dot"
         android:layout_width="10dp"
         android:layout_height="10dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="10dp"
         android:background="@drawable/badge_bg"
         android:visibility="gone" />
 

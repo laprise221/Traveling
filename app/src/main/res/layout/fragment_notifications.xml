@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/white">
+    android:background="@color/colorBackground">
 
     <!-- Toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="64dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="8dp"
-        android:background="?attr/colorPrimary">
+        android:background="@drawable/bg_profile_header"
+        android:elevation="4dp">
 
         <ImageButton
             android:id="@+id/btn_back"
@@ -27,7 +29,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="4dp"
             android:text="Notifications"
             android:textColor="@android:color/white"
             android:textSize="18sp"
@@ -40,11 +42,9 @@
             android:text="Tout lire"
             android:textAllCaps="false"
             android:textSize="12sp"
-            android:backgroundTint="@android:color/white"
-            android:textColor="?attr/colorPrimary"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            app:strokeColor="@android:color/white"
-            xmlns:app="http://schemas.android.com/apk/res-auto"
+            android:backgroundTint="#33FFFFFF"
+            android:textColor="@android:color/white"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
             app:cornerRadius="16dp" />
     </LinearLayout>
 
@@ -52,7 +52,8 @@
         android:id="@+id/recycler_notifications"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:background="@color/colorSurface" />
 
     <TextView
         android:id="@+id/tv_empty_notifications"
@@ -61,8 +62,8 @@
         android:layout_weight="1"
         android:gravity="center"
         android:text="Aucune notification"
-        android:textColor="#999999"
-        android:textSize="15sp"
+        android:textColor="@color/colorTextSecondary"
+        android:textSize="16sp"
         android:visibility="gone" />
 
 </LinearLayout>

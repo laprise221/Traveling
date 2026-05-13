@@ -3,30 +3,43 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="3dp">
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="6dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="2dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/colorPrimaryLight"
+    app:cardBackgroundColor="@color/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="10dp">
+        android:padding="12dp">
 
-        <ImageView
-            android:id="@+id/pub_image"
+        <!-- Image miniature avec coins arrondis -->
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="80dp"
             android:layout_height="80dp"
-            android:scaleType="centerCrop"
-            android:contentDescription="@null" />
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp">
+
+            <ImageView
+                android:id="@+id/pub_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null" />
+
+        </com.google.android.material.card.MaterialCardView>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:layout_marginStart="12dp">
+            android:layout_marginStart="14dp">
 
             <TextView
                 android:id="@+id/pub_title"
@@ -34,7 +47,7 @@
                 android:layout_height="wrap_content"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@android:color/black"
+                android:textColor="@color/colorTextPrimary"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
@@ -42,9 +55,9 @@
                 android:id="@+id/pub_subtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="4dp"
                 android:textSize="12sp"
-                android:textColor="#777777"
+                android:textColor="@color/colorTextSecondary"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
@@ -52,9 +65,9 @@
                 android:id="@+id/pub_date"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="3dp"
                 android:textSize="11sp"
-                android:textColor="#AAAAAA" />
+                android:textColor="@color/colorTextHint" />
         </LinearLayout>
 
         <ImageButton
@@ -63,7 +76,7 @@
             android:layout_height="36dp"
             android:src="@android:drawable/ic_menu_delete"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#F44336"
+            android:tint="@color/colorError"
             android:contentDescription="Supprimer" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

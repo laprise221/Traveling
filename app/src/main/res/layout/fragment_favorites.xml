@@ -3,16 +3,49 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="@color/colorBackground">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="4dp"
+        android:background="@color/colorBackground">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Favoris"
+            android:textColor="@color/colorTextPrimary"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.02" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vos contenus sauvegardés"
+            android:textSize="13sp"
+            android:textColor="@color/colorTextSecondary"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
 
     <!-- Toggle Photos / Parcours -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout_favorites"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@color/colorSurface"
         app:tabMode="fixed"
         app:tabGravity="fill"
         app:tabIndicatorColor="@color/colorPrimary"
+        app:tabIndicatorHeight="3dp"
         app:tabSelectedTextColor="@color/colorPrimary" />
 
     <!-- Liste des favoris -->
@@ -36,7 +69,8 @@
             android:layout_gravity="center"
             android:text="Aucun favori pour le moment"
             android:textSize="16sp"
-            android:textColor="@android:color/darker_gray" />
+            android:textStyle="bold"
+            android:textColor="@color/colorTextPrimary" />
 
     </FrameLayout>
 
@@ -49,7 +83,7 @@
         android:padding="32dp"
         android:text="Connectez-vous pour afficher vos favoris"
         android:textSize="16sp"
-        android:textColor="@android:color/darker_gray"
+        android:textColor="@color/colorTextSecondary"
         android:visibility="gone" />
 
 </LinearLayout>
