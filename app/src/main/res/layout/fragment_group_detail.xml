@@ -4,16 +4,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/white">
+    android:background="@color/colorBackground">
 
-    <!-- Toolbar -->
+    <!-- Toolbar avec gradient -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="64dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="8dp"
-        android:background="?attr/colorPrimary">
+        android:background="@drawable/bg_profile_header"
+        android:elevation="4dp">
 
         <ImageButton
             android:id="@+id/btn_back"
@@ -24,25 +25,31 @@
             android:contentDescription="Retour"
             android:tint="@android:color/white" />
 
-        <TextView
-            android:id="@+id/tv_group_name"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:textColor="@android:color/white"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:orientation="vertical"
+            android:layout_marginStart="4dp">
 
-        <TextView
-            android:id="@+id/tv_members_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:textColor="@android:color/white"
-            android:textSize="12sp" />
+            <TextView
+                android:id="@+id/tv_group_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_members_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#CCFFFFFF"
+                android:textSize="12sp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
@@ -58,6 +65,7 @@
             android:layout_height="match_parent"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
+            android:paddingHorizontal="8dp"
             android:clipToPadding="false" />
 
         <TextView
@@ -66,7 +74,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="Aucun message dans ce groupe"
-            android:textColor="#999999"
+            android:textColor="@color/colorTextSecondary"
             android:textSize="14sp"
             android:visibility="gone" />
 
@@ -78,36 +86,50 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="8dp"
-        android:background="@android:color/white"
-        android:elevation="4dp">
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp"
+        android:background="@color/colorSurface"
+        android:elevation="8dp">
 
-        <EditText
-            android:id="@+id/et_message"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Écrivez un message..."
-            android:maxLines="4"
-            android:inputType="textMultiLine|textCapSentences"
-            android:background="@drawable/bg_chat_other"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:textSize="14sp" />
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/colorPrimaryLight"
+            app:cardBackgroundColor="@color/colorBackground">
+
+            <EditText
+                android:id="@+id/et_message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Écrivez un message..."
+                android:textColorHint="@color/colorTextHint"
+                android:maxLines="4"
+                android:inputType="textMultiLine|textCapSentences"
+                android:background="@null"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:textSize="14sp"
+                android:textColor="@color/colorTextPrimary" />
+
+        </com.google.android.material.card.MaterialCardView>
 
         <ImageButton
             android:id="@+id/btn_send"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginStart="8dp"
-            android:backgroundTint="?attr/colorPrimary"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="10dp"
+            android:backgroundTint="@color/colorPrimary"
             android:background="@drawable/bg_chat_mine"
             android:src="@android:drawable/ic_menu_send"
             android:tint="@android:color/white"
             android:contentDescription="Envoyer"
-            android:padding="10dp" />
+            android:padding="12dp" />
 
     </LinearLayout>
 

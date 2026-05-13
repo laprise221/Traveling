@@ -13,8 +13,6 @@ import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
 import com.example.traveling.session.SessionManager;
-import com.google.android.material.button.MaterialButton;
-
 public class CreateFragment extends Fragment {
 
     @Nullable
@@ -28,8 +26,8 @@ public class CreateFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        MaterialButton btnSharePhoto = view.findViewById(R.id.btn_share_photo);
-        MaterialButton btnCreatePath = view.findViewById(R.id.btn_create_path);
+        View btnSharePhoto = view.findViewById(R.id.btn_share_photo);
+        View btnCreatePath = view.findViewById(R.id.btn_create_path);
 
         btnSharePhoto.setOnClickListener(v -> openSharePhoto());
         btnCreatePath.setOnClickListener(v -> openCreatePath());
