@@ -3,9 +3,13 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="4dp">
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="8dp"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="2dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/colorPrimaryLight"
+    app:cardBackgroundColor="@color/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -15,7 +19,7 @@
         <!-- Image du parcours -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="180dp">
+            android:layout_height="200dp">
 
             <ImageView
                 android:id="@+id/path_image"
@@ -24,17 +28,25 @@
                 android:scaleType="centerCrop"
                 android:contentDescription="Image du parcours" />
 
-            <!-- Badge type de parcours -->
+            <!-- Gradient overlay bas -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="80dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_hero_gradient" />
+
+            <!-- Badge type -->
             <com.google.android.material.chip.Chip
                 android:id="@+id/path_type_chip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|end"
-                android:layout_margin="8dp"
+                android:layout_margin="12dp"
                 style="@style/Widget.MaterialComponents.Chip.Action"
                 app:chipBackgroundColor="@color/colorPrimary"
                 android:textColor="@android:color/white"
-                android:textSize="11sp" />
+                android:textSize="11sp"
+                app:chipMinHeight="26dp" />
 
         </FrameLayout>
 
@@ -42,42 +54,65 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="16dp">
 
-            <!-- Titre + ville -->
+            <!-- Titre -->
             <TextView
                 android:id="@+id/path_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold"
-                android:textColor="@android:color/black" />
+                android:textColor="@color/colorTextPrimary"
+                android:letterSpacing="-0.01" />
 
-            <TextView
-                android:id="@+id/path_city"
+            <!-- Ville -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:textSize="14sp"
-                android:textColor="@color/colorPrimary" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@android:drawable/ic_menu_mylocation"
+                    app:tint="@color/colorPrimary"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/path_city"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorPrimary" />
+
+            </LinearLayout>
 
             <!-- Description -->
             <TextView
                 android:id="@+id/path_description"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="8dp"
                 android:textSize="14sp"
+                android:lineSpacingMultiplier="1.4"
                 android:maxLines="2"
                 android:ellipsize="end"
-                android:textColor="#555555" />
+                android:textColor="@color/colorTextSecondary" />
 
-            <!-- Métriques : durée, budget, difficulté, étapes -->
+            <!-- Métriques -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_metric_row"
+                android:padding="10dp"
                 android:gravity="center_vertical">
 
                 <!-- Durée -->
@@ -92,17 +127,28 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Durée"
-                        android:textSize="11sp"
-                        android:textColor="@android:color/darker_gray" />
+                        android:textSize="10sp"
+                        android:textAllCaps="true"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/colorPrimary" />
 
                     <TextView
                         android:id="@+id/path_duration"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_marginTop="2dp"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary" />
 
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:background="@color/colorPrimaryMedium"
+                    android:alpha="0.4"
+                    android:layout_gravity="center_vertical" />
 
                 <!-- Budget -->
                 <LinearLayout
@@ -116,17 +162,28 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Budget"
-                        android:textSize="11sp"
-                        android:textColor="@android:color/darker_gray" />
+                        android:textSize="10sp"
+                        android:textAllCaps="true"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/colorPrimary" />
 
                     <TextView
                         android:id="@+id/path_budget"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_marginTop="2dp"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary" />
 
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:background="@color/colorPrimaryMedium"
+                    android:alpha="0.4"
+                    android:layout_gravity="center_vertical" />
 
                 <!-- Difficulté -->
                 <LinearLayout
@@ -140,17 +197,28 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Effort"
-                        android:textSize="11sp"
-                        android:textColor="@android:color/darker_gray" />
+                        android:textSize="10sp"
+                        android:textAllCaps="true"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/colorPrimary" />
 
                     <TextView
                         android:id="@+id/path_difficulty"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_marginTop="2dp"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary" />
 
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:background="@color/colorPrimaryMedium"
+                    android:alpha="0.4"
+                    android:layout_gravity="center_vertical" />
 
                 <!-- Étapes -->
                 <LinearLayout
@@ -164,26 +232,37 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Étapes"
-                        android:textSize="11sp"
-                        android:textColor="@android:color/darker_gray" />
+                        android:textSize="10sp"
+                        android:textAllCaps="true"
+                        android:letterSpacing="0.05"
+                        android:textColor="@color/colorPrimary" />
 
                     <TextView
                         android:id="@+id/path_steps_count"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_marginTop="2dp"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary" />
 
                 </LinearLayout>
 
             </LinearLayout>
+
+            <!-- Séparateur -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="4dp"
+                android:background="@color/colorDivider" />
 
             <!-- Barre du bas : auteur + like -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginTop="10dp"
                 android:gravity="center_vertical">
 
                 <TextView
@@ -192,12 +271,13 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:textSize="12sp"
-                    android:textColor="@android:color/darker_gray" />
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextSecondary" />
 
                 <ImageButton
                     android:id="@+id/btn_like_path"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@drawable/ic_thumb_up"
                     android:contentDescription="Like"
@@ -209,13 +289,13 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="2dp"
                     android:textSize="13sp"
-                    android:textColor="@android:color/darker_gray" />
+                    android:textColor="@color/colorTextSecondary" />
 
                 <ImageButton
                     android:id="@+id/btn_favorite_path"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="6dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@drawable/ic_favorite"
                     android:contentDescription="Favori"
