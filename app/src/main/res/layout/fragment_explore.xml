@@ -17,13 +17,10 @@
             android:layout_width="match_parent"
             android:layout_height="290dp">
 
-            <ImageView
-                android:id="@+id/hero_image"
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/hero_view_pager"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerCrop"
-                android:src="@drawable/sample_photo_3"
-                android:contentDescription="@null" />
+                android:layout_height="match_parent" />
 
             <!-- Gradient overlay -->
             <View
@@ -104,6 +101,14 @@
                     android:text="Explorez, partagez, découvrez"
                     android:textColor="#CCFFFFFF"
                     android:textSize="14sp" />
+
+                <LinearLayout
+                    android:id="@+id/hero_dots_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical" />
 
             </LinearLayout>
         </FrameLayout>
