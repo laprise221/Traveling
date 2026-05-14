@@ -192,20 +192,26 @@ public class ExploreFragment extends Fragment
     }
 
     private void loadPhotosFromFirestore() {
-        FirestoreRepository.get().loadPublicPhotos(photos -> {
+        FirestoreRepository.get().loadPublicPhotos(publicPhotos -> {
             if (!isAdded()) return;
-            loadedPhotos = photos;
             if (!SessionManager.get().isAnonymous()) {
-                FirestoreRepository.get().checkLikedPhotos(photos, () -> {
+                FirestoreRepository.get().loadPrivatePhotos(privatePhotos -> {
                     if (!isAdded()) return;
-                    FirestoreRepository.get().checkFavoritedPhotos(photos, () -> {
+                    List<Photo> all = new ArrayList<>(publicPhotos);
+                    all.addAll(privatePhotos);
+                    loadedPhotos = all;
+                    FirestoreRepository.get().checkLikedPhotos(all, () -> {
                         if (!isAdded()) return;
-                        List<Photo> filtered = applyFilters(loadedPhotos);
-                        photoAdapter1.setPhotos(filtered);
-                        photoAdapter2.setPhotos(sortByPopularity(filtered));
+                        FirestoreRepository.get().checkFavoritedPhotos(all, () -> {
+                            if (!isAdded()) return;
+                            List<Photo> filtered = applyFilters(loadedPhotos);
+                            photoAdapter1.setPhotos(filtered);
+                            photoAdapter2.setPhotos(sortByPopularity(filtered));
+                        });
                     });
                 });
             } else {
+                loadedPhotos = publicPhotos;
                 List<Photo> filtered = applyFilters(loadedPhotos);
                 photoAdapter1.setPhotos(filtered);
                 photoAdapter2.setPhotos(sortByPopularity(filtered));

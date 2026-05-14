@@ -73,7 +73,9 @@ public class FirestoreRepository {
         data.put("likeCount", 0);
         data.put("commentCount", 0);
         data.put("favoriteCount", 0);
-        data.put("isPublic", photo.getIsPublic());
+        String visibility = photo.getVisibility() != null ? photo.getVisibility() : "public";
+        data.put("visibility", visibility);
+        data.put("isPublic", "public".equals(visibility));
         data.put("groupId", photo.getGroupId());
         data.put("imageBase64", photo.getImageBase64());
         if (photo.getImageBase64List() != null && !photo.getImageBase64List().isEmpty()) {
@@ -88,6 +90,29 @@ public class FirestoreRepository {
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error saving photo", e);
+                    if (onFailure != null) onFailure.onFailure(e);
+                });
+    }
+
+    /** Update an existing photo document */
+    public void updatePhoto(String photoId, Photo photo,
+            OnSuccessCallback<Void> onSuccess, OnFailureCallback onFailure) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("title", photo.getTitle());
+        data.put("description", photo.getDescription());
+        data.put("locationName", photo.getLocationName());
+        data.put("locationType", photo.getLocationType());
+        String visibility = photo.getVisibility() != null ? photo.getVisibility() : "public";
+        data.put("visibility", visibility);
+        data.put("isPublic", "public".equals(visibility));
+        if (photo.getImageBase64List() != null && !photo.getImageBase64List().isEmpty()) {
+            data.put("imageBase64List", photo.getImageBase64List());
+            data.put("imageBase64", photo.getImageBase64List().get(0));
+        }
+        db.collection("photos").document(photoId).update(data)
+                .addOnSuccessListener(v -> { if (onSuccess != null) onSuccess.onSuccess(null); })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error updating photo", e);
                     if (onFailure != null) onFailure.onFailure(e);
                 });
     }
@@ -115,6 +140,26 @@ public class FirestoreRepository {
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Error loading public photos", e);
+                    callback.onSuccess(new ArrayList<>());
+                });
+    }
+
+    /** Load photos with visibility="private" (visible to all connected users) */
+    public void loadPrivatePhotos(OnSuccessCallback<List<Photo>> callback) {
+        db.collection("photos")
+                .whereEqualTo("visibility", "private")
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .get()
+                .addOnSuccessListener(snapshots -> {
+                    List<Photo> photos = new ArrayList<>();
+                    for (DocumentSnapshot doc : snapshots) {
+                        Photo photo = docToPhoto(doc);
+                        if (photo != null) photos.add(photo);
+                    }
+                    callback.onSuccess(photos);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error loading private photos", e);
                     callback.onSuccess(new ArrayList<>());
                 });
     }

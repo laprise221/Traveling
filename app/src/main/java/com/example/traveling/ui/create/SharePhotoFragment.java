@@ -48,9 +48,11 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.traveling.BuildConfig;
 import com.example.traveling.R;
+import com.example.traveling.worker.SchedulePublishHelper;
 import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.GroupRepository;
 import com.example.traveling.data.ImageUtils;
+import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.Group;
 import com.example.traveling.model.Photo;
 import com.example.traveling.session.SessionManager;
@@ -92,6 +94,9 @@ public class SharePhotoFragment extends Fragment {
     private final List<Object> selectedImages = new ArrayList<>(); // Uri or Bitmap
     private final List<String> selectedGroupIds = new ArrayList<>();
     private List<Group> userGroups = new ArrayList<>();
+
+    // Edit mode
+    private Photo editingPhoto = null;
 
     // Adapters
     private PhotoCarouselAdapter previewCarouselAdapter;
@@ -207,15 +212,66 @@ public class SharePhotoFragment extends Fragment {
         btnAddPhoto.setOnClickListener(v -> showImageSourceDialog());
         btnAiAnnotate.setOnClickListener(v -> annotateWithAI());
 
-        view.findViewById(R.id.btn_back).setOnClickListener(v ->
-                Navigation.findNavController(v).navigateUp());
-        view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
-        view.findViewById(R.id.btn_draft).setOnClickListener(v -> saveDraft());
+        view.findViewById(R.id.btn_back).setOnClickListener(v -> handleBack());
+        view.findViewById(R.id.btn_publish).setOnClickListener(v -> showPublishOptionsDialog());
 
         if (!SessionManager.get().isAnonymous()) {
             loadUserGroups();
         } else {
             tvNoGroups.setText("Connectez-vous pour partager dans un groupe");
+        }
+
+        // Edit mode: check if a photo was passed via PhotoRegistry
+        Photo toEdit = PhotoRegistry.get();
+        if (toEdit != null) {
+            PhotoRegistry.set(null);
+            editingPhoto = toEdit;
+            enterEditMode(toEdit);
+        }
+    }
+
+    private void enterEditMode(Photo photo) {
+        // Update toolbar title
+        View toolbar = requireView().findViewById(R.id.btn_back);
+        if (toolbar != null && toolbar.getParent() instanceof android.view.ViewGroup) {
+            android.view.ViewGroup bar = (android.view.ViewGroup) toolbar.getParent();
+            for (int i = 0; i < bar.getChildCount(); i++) {
+                if (bar.getChildAt(i) instanceof TextView) {
+                    ((TextView) bar.getChildAt(i)).setText("Modifier la photo");
+                }
+            }
+        }
+
+        // Pre-fill text fields
+        if (photo.getTitle() != null)        etTitle.setText(photo.getTitle());
+        if (photo.getDescription() != null)  etDescription.setText(photo.getDescription());
+        if (photo.getLocationName() != null) etLocation.setText(photo.getLocationName());
+
+        // Switch: public ON, private/draft OFF
+        switchPublic.setChecked(!"private".equals(photo.getVisibility()));
+
+        // Location type chip
+        String type = photo.getLocationType();
+        if (type != null) {
+            switch (type) {
+                case "nature":      chipGroupType.check(R.id.chip_nature);      break;
+                case "musée":       chipGroupType.check(R.id.chip_musee);       break;
+                case "rue":         chipGroupType.check(R.id.chip_rue);         break;
+                case "restaurant":  chipGroupType.check(R.id.chip_restaurant);  break;
+                case "autre":       chipGroupType.check(R.id.chip_autre);       break;
+            }
+        }
+
+        // Load existing images as Bitmaps in background
+        List<String> images = photo.getImages();
+        if (!images.isEmpty()) {
+            executor.execute(() -> {
+                for (String b64 : images) {
+                    android.graphics.Bitmap bmp = com.example.traveling.data.ImageUtils.base64ToBitmap(b64);
+                    if (bmp != null) selectedImages.add(bmp);
+                }
+                mainHandler.post(() -> { if (isAdded()) updatePreviewUI(); });
+            });
         }
     }
 
@@ -426,14 +482,42 @@ public class SharePhotoFragment extends Fragment {
                 .show();
     }
 
-    private void saveDraft() {
-        if (selectedImages.isEmpty()) {
-            Toast.makeText(requireContext(), "Veuillez choisir au moins une photo", Toast.LENGTH_SHORT).show();
+    private boolean hasContent() {
+        boolean hasImage = !selectedImages.isEmpty();
+        boolean hasTitle = etTitle.getText() != null && !etTitle.getText().toString().trim().isEmpty();
+        return hasImage || hasTitle;
+    }
+
+    private void handleBack() {
+        if (editingPhoto != null) {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Abandonner les modifications ?")
+                    .setMessage("Vos modifications ne seront pas sauvegardées.")
+                    .setPositiveButton("Abandonner", (d, w) ->
+                            Navigation.findNavController(requireView()).navigateUp())
+                    .setNegativeButton("Rester", null)
+                    .show();
             return;
         }
+        if (!hasContent()) {
+            Navigation.findNavController(requireView()).navigateUp();
+            return;
+        }
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Enregistrer en brouillon ?")
+                .setMessage("Voulez-vous sauvegarder cette publication en brouillon pour la reprendre plus tard ?")
+                .setPositiveButton("Brouillon", (d, w) -> saveAsDraft())
+                .setNegativeButton("Abandonner", (d, w) ->
+                        Navigation.findNavController(requireView()).navigateUp())
+                .setNeutralButton("Annuler", null)
+                .show();
+    }
 
-        requireView().findViewById(R.id.btn_draft).setEnabled(false);
-
+    private void saveAsDraft() {
+        if (selectedImages.isEmpty()) {
+            Navigation.findNavController(requireView()).navigateUp();
+            return;
+        }
         executor.execute(() -> {
             List<String> base64List = new ArrayList<>();
             for (Object img : selectedImages) {
@@ -442,31 +526,23 @@ public class SharePhotoFragment extends Fragment {
                         : ImageUtils.uriToBase64(requireContext(), (Uri) img);
                 if (b64 != null) base64List.add(b64);
             }
-
             if (base64List.isEmpty()) {
-                mainHandler.post(() -> {
-                    if (!isAdded()) return;
-                    requireView().findViewById(R.id.btn_draft).setEnabled(true);
-                    Toast.makeText(requireContext(), "Erreur lors du traitement des images", Toast.LENGTH_SHORT).show();
-                });
+                mainHandler.post(() -> Navigation.findNavController(requireView()).navigateUp());
                 return;
             }
-
             mainHandler.post(() -> {
                 if (!isAdded()) return;
-
                 FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                 String authorId = user != null ? user.getUid() : "";
-                String authorName = "Moi";
-                if (user != null && user.getDisplayName() != null && !user.getDisplayName().isEmpty()) {
-                    authorName = user.getDisplayName();
-                }
-
-                String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
+                String authorName = (user != null && user.getDisplayName() != null
+                        && !user.getDisplayName().isEmpty()) ? user.getDisplayName() : "Moi";
+                String title = etTitle.getText() != null
+                        ? etTitle.getText().toString().trim() : "";
                 if (title.isEmpty()) title = "Brouillon";
-
-                String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
-                String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
+                String description = etDescription.getText() != null
+                        ? etDescription.getText().toString().trim() : "";
+                String location = etLocation.getText() != null
+                        ? etLocation.getText().toString().trim() : "";
                 String today = new java.text.SimpleDateFormat("dd MMM yyyy",
                         java.util.Locale.FRENCH).format(new java.util.Date());
 
@@ -478,50 +554,71 @@ public class SharePhotoFragment extends Fragment {
                 photo.setLocationName(location);
                 photo.setDate(today);
                 photo.setLocationType(getSelectedLocationType());
-                photo.setIsPublic(false);
+                photo.setVisibility("draft");
                 photo.setImageBase64List(base64List);
                 photo.setImageBase64(base64List.get(0));
-
                 Object first = selectedImages.get(0);
                 if (first instanceof Bitmap) photo.setImageBitmap((Bitmap) first);
                 else photo.setImageUri((Uri) first);
 
-                if (!location.isEmpty()) {
-                    GeocodingUtils.geocode(location, new GeocodingUtils.GeocodingCallback() {
-                        @Override public void onResult(double lat, double lon) {
-                            photo.setLatitude(lat);
-                            photo.setLongitude(lon);
-                            persistDraft(photo);
-                        }
-                        @Override public void onFailure() { persistDraft(photo); }
-                    });
-                } else {
-                    persistDraft(photo);
-                }
+                FirestoreRepository.get().savePhoto(photo,
+                        id -> {
+                            if (!isAdded()) return;
+                            Toast.makeText(requireContext(), "Brouillon enregistré",
+                                    Toast.LENGTH_SHORT).show();
+                            Navigation.findNavController(requireView()).navigateUp();
+                        },
+                        e -> Navigation.findNavController(requireView()).navigateUp());
             });
         });
     }
 
-    private void persistDraft(Photo photo) {
-        FirestoreRepository.get().savePhoto(photo,
-                photoId -> {
-                    if (!isAdded()) return;
-                    Toast.makeText(requireContext(), "Brouillon enregistré", Toast.LENGTH_SHORT).show();
-                    Navigation.findNavController(requireView()).navigateUp();
-                },
-                e -> {
-                    if (isAdded()) {
-                        requireView().findViewById(R.id.btn_draft).setEnabled(true);
-                        Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
-                });
+    private void showPublishOptionsDialog() {
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Publier")
+                .setItems(new String[]{"Publier maintenant", "Planifier"}, (dialog, which) -> {
+                    if (which == 0) publish(null);
+                    else showScheduleDialog();
+                })
+                .show();
     }
 
-    private void publish() {
+    private void showScheduleDialog() {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        android.app.DatePickerDialog dateDialog = new android.app.DatePickerDialog(
+                requireContext(),
+                (datePicker, year, month, day) -> {
+                    android.app.TimePickerDialog timeDialog = new android.app.TimePickerDialog(
+                            requireContext(),
+                            (timePicker, hour, minute) -> {
+                                java.util.Calendar scheduled = java.util.Calendar.getInstance();
+                                scheduled.set(year, month, day, hour, minute, 0);
+                                scheduled.set(java.util.Calendar.MILLISECOND, 0);
+                                if (scheduled.getTimeInMillis() <= System.currentTimeMillis()) {
+                                    Toast.makeText(requireContext(),
+                                            "La date doit être dans le futur", Toast.LENGTH_SHORT).show();
+                                    return;
+                                }
+                                publish(new com.google.firebase.Timestamp(scheduled.getTime()));
+                            },
+                            cal.get(java.util.Calendar.HOUR_OF_DAY),
+                            cal.get(java.util.Calendar.MINUTE),
+                            true
+                    );
+                    timeDialog.show();
+                },
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH),
+                cal.get(java.util.Calendar.DAY_OF_MONTH)
+        );
+        dateDialog.getDatePicker().setMinDate(System.currentTimeMillis());
+        dateDialog.show();
+    }
+
+    private void publish(com.google.firebase.Timestamp scheduledDate) {
         String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
         String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
         String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
-
         if (selectedImages.isEmpty()) {
             Toast.makeText(requireContext(), "Veuillez choisir au moins une photo", Toast.LENGTH_SHORT).show();
             return;
@@ -536,6 +633,8 @@ public class SharePhotoFragment extends Fragment {
             etLocation.requestFocus();
             return;
         }
+        String visibility = scheduledDate != null ? "scheduled"
+                : (switchPublic.isChecked() ? "public" : "private");
 
         requireView().findViewById(R.id.btn_publish).setEnabled(false);
 
@@ -582,7 +681,8 @@ public class SharePhotoFragment extends Fragment {
                 photo.setLocationName(location);
                 photo.setDate(today);
                 photo.setLocationType(getSelectedLocationType());
-                photo.setIsPublic(switchPublic.isChecked());
+                photo.setVisibility(visibility);
+                if (scheduledDate != null) photo.setScheduledPublishDate(scheduledDate);
                 photo.setImageBase64List(base64List);
                 photo.setImageBase64(base64List.get(0));
 
@@ -595,33 +695,59 @@ public class SharePhotoFragment extends Fragment {
                     @Override public void onResult(double lat, double lon) {
                         photo.setLatitude(lat);
                         photo.setLongitude(lon);
-                        savePhoto(photo);
+                        savePhoto(photo, scheduledDate);
                     }
-                    @Override public void onFailure() { savePhoto(photo); }
+                    @Override public void onFailure() { savePhoto(photo, scheduledDate); }
                 });
             });
         });
     }
 
-    private void savePhoto(Photo photo) {
-        FirestoreRepository.get().savePhoto(photo,
-                photoId -> {
-                    if (!isAdded()) return;
-                    for (String groupId : selectedGroupIds) {
-                        GroupRepository.get().addGroupPost(groupId, photoId, null, null);
-                    }
-                    String msg = selectedGroupIds.isEmpty()
-                            ? "Photo publiée !"
-                            : "Photo publiée et partagée dans " + selectedGroupIds.size() + " groupe(s) !";
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
-                    Navigation.findNavController(requireView()).navigateUp();
-                },
-                e -> {
-                    if (isAdded()) {
-                        requireView().findViewById(R.id.btn_publish).setEnabled(true);
-                        Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
-                });
+    private void savePhoto(Photo photo, com.google.firebase.Timestamp scheduledDate) {
+        if (editingPhoto != null && editingPhoto.getId() != null) {
+            FirestoreRepository.get().updatePhoto(editingPhoto.getId(), photo,
+                    v -> {
+                        if (!isAdded()) return;
+                        Toast.makeText(requireContext(), "Modifications enregistrées", Toast.LENGTH_SHORT).show();
+                        Navigation.findNavController(requireView()).navigateUp();
+                    },
+                    e -> {
+                        if (isAdded()) {
+                            requireView().findViewById(R.id.btn_publish).setEnabled(true);
+                            Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        } else {
+            FirestoreRepository.get().savePhoto(photo,
+                    photoId -> {
+                        if (!isAdded()) return;
+                        for (String groupId : selectedGroupIds) {
+                            GroupRepository.get().addGroupPost(groupId, photoId, null, null);
+                        }
+                        String msg;
+                        if (scheduledDate != null) {
+                            SchedulePublishHelper.schedule(requireContext(), photoId,
+                                    SchedulePublishHelper.COLLECTION_PHOTOS,
+                                    scheduledDate.toDate());
+                            String formatted = new java.text.SimpleDateFormat(
+                                    "dd MMM yyyy 'à' HH:mm", java.util.Locale.FRENCH)
+                                    .format(scheduledDate.toDate());
+                            msg = "Publication planifiée pour le " + formatted;
+                        } else {
+                            msg = selectedGroupIds.isEmpty()
+                                    ? "Photo publiée !"
+                                    : "Photo publiée et partagée dans " + selectedGroupIds.size() + " groupe(s) !";
+                        }
+                        Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
+                        Navigation.findNavController(requireView()).navigateUp();
+                    },
+                    e -> {
+                        if (isAdded()) {
+                            requireView().findViewById(R.id.btn_publish).setEnabled(true);
+                            Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        }
     }
 
     private void annotateWithAI() {

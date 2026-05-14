@@ -27,6 +27,8 @@ public class TravelPath {
     private boolean liked;
     private boolean favorited;
     private boolean isPublic;
+    private String visibility; // "public", "private", "scheduled"
+    private Date scheduledPublishDate;
     private List<PathStep> steps;
     private String imageBase64;
     private int imageResId;
@@ -74,6 +76,8 @@ public class TravelPath {
     public int getCommentCount() { return commentCount; }
     public int getFavoriteCount() { return favoriteCount; }
     public boolean getIsPublic() { return isPublic; }
+    public String getVisibility() { return visibility; }
+    public Date getScheduledPublishDate() { return scheduledPublishDate; }
     public String getImageBase64() { return imageBase64; }
     @Exclude
     public boolean isLiked() { return liked; }
@@ -115,6 +119,8 @@ public class TravelPath {
         this.favoriteCount += favorited ? 1 : -1;
     }
     public void setPublic(boolean isPublic) { this.isPublic = isPublic; }
+    public void setVisibility(String visibility) { this.visibility = visibility; }
+    public void setScheduledPublishDate(Date scheduledPublishDate) { this.scheduledPublishDate = scheduledPublishDate; }
     public void setSteps(List<PathStep> steps) { this.steps = steps; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
     public void setImageResId(int imageResId) { this.imageResId = imageResId; }
