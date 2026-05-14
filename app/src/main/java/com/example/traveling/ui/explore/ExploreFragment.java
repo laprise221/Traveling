@@ -1,10 +1,14 @@
 package com.example.traveling.ui.explore;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -14,6 +18,7 @@ import androidx.navigation.NavOptions;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FilterRegistry;
@@ -41,10 +46,24 @@ public class ExploreFragment extends Fragment
     private PhotoCardAdapter photoAdapter1, photoAdapter2;
     private PathCardAdapter pathAdapter1, pathAdapter2;
     private RecyclerView recycler1, recycler2;
+    private TabLayout tabLayout;
     private boolean showingPhotos = true;
 
     private List<Photo> loadedPhotos = new ArrayList<>();
     private List<TravelPath> loadedPaths = new ArrayList<>();
+
+    private ViewPager2 heroViewPager;
+    private LinearLayout heroDotsContainer;
+    private final Handler autoScrollHandler = new Handler(Looper.getMainLooper());
+    private Runnable autoScrollRunnable;
+    private static final int AUTO_SCROLL_DELAY_MS = 3000;
+    private static final int[] HERO_IMAGES = {
+            R.drawable.montagne,
+            R.drawable.plage,
+            R.drawable.lac,
+            R.drawable.tokyo,
+            R.drawable.cactus
+    };
 
     @Nullable
     @Override
@@ -58,9 +77,13 @@ public class ExploreFragment extends Fragment
         super.onViewCreated(view, savedInstanceState);
 
         MaterialCardView searchBar = view.findViewById(R.id.search_bar_card);
-        TabLayout tabLayout = view.findViewById(R.id.tab_layout_explore);
+        tabLayout = view.findViewById(R.id.tab_layout_explore);
         recycler1 = view.findViewById(R.id.recycler_photos);
         recycler2 = view.findViewById(R.id.recycler_paths);
+
+        heroViewPager = view.findViewById(R.id.hero_view_pager);
+        heroDotsContainer = view.findViewById(R.id.hero_dots_container);
+        setupHeroCarousel();
 
         recycler1.setLayoutManager(
                 new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
@@ -99,9 +122,67 @@ public class ExploreFragment extends Fragment
 
     }
 
+    private void setupHeroCarousel() {
+        List<Integer> images = new ArrayList<>();
+        for (int resId : HERO_IMAGES) images.add(resId);
+
+        HeroCarouselAdapter adapter = new HeroCarouselAdapter(images);
+        heroViewPager.setAdapter(adapter);
+
+        setupHeroDots(images.size());
+
+        heroViewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                updateHeroDots(position);
+            }
+        });
+
+        autoScrollRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (heroViewPager == null) return;
+                int next = (heroViewPager.getCurrentItem() + 1) % HERO_IMAGES.length;
+                heroViewPager.setCurrentItem(next, true);
+                autoScrollHandler.postDelayed(this, AUTO_SCROLL_DELAY_MS);
+            }
+        };
+    }
+
+    private void setupHeroDots(int count) {
+        heroDotsContainer.removeAllViews();
+        int sizePx = (int) (8 * getResources().getDisplayMetrics().density);
+        int marginPx = (int) (4 * getResources().getDisplayMetrics().density);
+        for (int i = 0; i < count; i++) {
+            ImageView dot = new ImageView(requireContext());
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(sizePx, sizePx);
+            params.setMargins(marginPx, 0, marginPx, 0);
+            dot.setLayoutParams(params);
+            dot.setImageResource(i == 0 ? R.drawable.dot_selected : R.drawable.dot_unselected);
+            heroDotsContainer.addView(dot);
+        }
+    }
+
+    private void updateHeroDots(int selectedPosition) {
+        for (int i = 0; i < heroDotsContainer.getChildCount(); i++) {
+            ImageView dot = (ImageView) heroDotsContainer.getChildAt(i);
+            dot.setImageResource(i == selectedPosition ? R.drawable.dot_selected : R.drawable.dot_unselected);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        autoScrollHandler.removeCallbacks(autoScrollRunnable);
+    }
+
     @Override
     public void onResume() {
         super.onResume();
+        autoScrollHandler.postDelayed(autoScrollRunnable, AUTO_SCROLL_DELAY_MS);
+        if (tabLayout != null) {
+            tabLayout.selectTab(tabLayout.getTabAt(showingPhotos ? 0 : 1));
+        }
         // Ré-appliquer seulement si des filtres sont actifs ET que des photos sont chargées
         if (!loadedPhotos.isEmpty() && !FilterRegistry.get().isEmpty()) {
             List<Photo> filtered = applyFilters(loadedPhotos);

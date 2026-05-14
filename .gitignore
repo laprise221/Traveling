@@ -22,5 +22,18 @@ google-services.json
 **/.idea/
 *.gitignoez
 
+# Rapport technique (ne pas versionner)
+rapport.tex
+rapport.pdf
+*.aux
+*.toc
+*.log
+*.out
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
 
 

@@ -210,6 +210,7 @@ public class SharePhotoFragment extends Fragment {
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
                 Navigation.findNavController(v).navigateUp());
         view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
+        view.findViewById(R.id.btn_draft).setOnClickListener(v -> saveDraft());
 
         if (!SessionManager.get().isAnonymous()) {
             loadUserGroups();
@@ -423,6 +424,97 @@ public class SharePhotoFragment extends Fragment {
                     }
                 })
                 .show();
+    }
+
+    private void saveDraft() {
+        if (selectedImages.isEmpty()) {
+            Toast.makeText(requireContext(), "Veuillez choisir au moins une photo", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        requireView().findViewById(R.id.btn_draft).setEnabled(false);
+
+        executor.execute(() -> {
+            List<String> base64List = new ArrayList<>();
+            for (Object img : selectedImages) {
+                String b64 = (img instanceof Bitmap)
+                        ? ImageUtils.bitmapToBase64((Bitmap) img)
+                        : ImageUtils.uriToBase64(requireContext(), (Uri) img);
+                if (b64 != null) base64List.add(b64);
+            }
+
+            if (base64List.isEmpty()) {
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    requireView().findViewById(R.id.btn_draft).setEnabled(true);
+                    Toast.makeText(requireContext(), "Erreur lors du traitement des images", Toast.LENGTH_SHORT).show();
+                });
+                return;
+            }
+
+            mainHandler.post(() -> {
+                if (!isAdded()) return;
+
+                FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                String authorId = user != null ? user.getUid() : "";
+                String authorName = "Moi";
+                if (user != null && user.getDisplayName() != null && !user.getDisplayName().isEmpty()) {
+                    authorName = user.getDisplayName();
+                }
+
+                String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
+                if (title.isEmpty()) title = "Brouillon";
+
+                String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
+                String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
+                String today = new java.text.SimpleDateFormat("dd MMM yyyy",
+                        java.util.Locale.FRENCH).format(new java.util.Date());
+
+                Photo photo = new Photo();
+                photo.setTitle(title);
+                photo.setDescription(description);
+                photo.setAuthorId(authorId);
+                photo.setAuthorName(authorName);
+                photo.setLocationName(location);
+                photo.setDate(today);
+                photo.setLocationType(getSelectedLocationType());
+                photo.setIsPublic(false);
+                photo.setImageBase64List(base64List);
+                photo.setImageBase64(base64List.get(0));
+
+                Object first = selectedImages.get(0);
+                if (first instanceof Bitmap) photo.setImageBitmap((Bitmap) first);
+                else photo.setImageUri((Uri) first);
+
+                if (!location.isEmpty()) {
+                    GeocodingUtils.geocode(location, new GeocodingUtils.GeocodingCallback() {
+                        @Override public void onResult(double lat, double lon) {
+                            photo.setLatitude(lat);
+                            photo.setLongitude(lon);
+                            persistDraft(photo);
+                        }
+                        @Override public void onFailure() { persistDraft(photo); }
+                    });
+                } else {
+                    persistDraft(photo);
+                }
+            });
+        });
+    }
+
+    private void persistDraft(Photo photo) {
+        FirestoreRepository.get().savePhoto(photo,
+                photoId -> {
+                    if (!isAdded()) return;
+                    Toast.makeText(requireContext(), "Brouillon enregistré", Toast.LENGTH_SHORT).show();
+                    Navigation.findNavController(requireView()).navigateUp();
+                },
+                e -> {
+                    if (isAdded()) {
+                        requireView().findViewById(R.id.btn_draft).setEnabled(true);
+                        Toast.makeText(requireContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void publish() {
