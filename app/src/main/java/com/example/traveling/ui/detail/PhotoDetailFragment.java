@@ -4,27 +4,30 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.traveling.R;
 import com.example.traveling.data.FirestoreRepository;
-import com.example.traveling.data.ImageUtils;
 import com.example.traveling.data.NotificationRepository;
 import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.Comment;
 import com.example.traveling.model.Photo;
 import com.example.traveling.session.SessionManager;
+import com.example.traveling.ui.explore.PhotoCarouselAdapter;
 import com.google.android.material.chip.Chip;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -69,17 +72,33 @@ public class PhotoDetailFragment extends Fragment {
         view.findViewById(R.id.btn_report).setOnClickListener(v ->
                 Toast.makeText(requireContext(), "Contenu signalé", Toast.LENGTH_SHORT).show());
 
-        // Image
-        ImageView image = view.findViewById(R.id.detail_image);
-        if (photo.getImageBitmap() != null) {
-            image.setImageBitmap(photo.getImageBitmap());
+        // Image carousel
+        ViewPager2 detailViewPager = view.findViewById(R.id.detail_view_pager);
+        LinearLayout detailDotsIndicator = view.findViewById(R.id.detail_dots_indicator);
+
+        java.util.List<Object> images = new java.util.ArrayList<>();
+        java.util.List<String> base64s = photo.getImages();
+        if (!base64s.isEmpty()) {
+            images.addAll(base64s);
+        } else if (photo.getImageBitmap() != null) {
+            images.add(photo.getImageBitmap());
         } else if (photo.getImageUri() != null) {
-            image.setImageURI(photo.getImageUri());
-        } else if (photo.getImageResId() != 0) {
-            image.setImageResource(photo.getImageResId());
-        } else if (photo.getImageBase64() != null && !photo.getImageBase64().isEmpty()) {
-            android.graphics.Bitmap bmp = ImageUtils.base64ToBitmap(photo.getImageBase64());
-            if (bmp != null) image.setImageBitmap(bmp);
+            images.add(photo.getImageUri());
+        }
+
+        PhotoCarouselAdapter carouselAdapter = new PhotoCarouselAdapter();
+        carouselAdapter.setImages(images);
+        detailViewPager.setAdapter(carouselAdapter);
+
+        if (images.size() > 1) {
+            detailDotsIndicator.setVisibility(View.VISIBLE);
+            setupDetailDots(detailDotsIndicator, images.size());
+            detailViewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+                @Override
+                public void onPageSelected(int position) {
+                    updateDetailDots(detailDotsIndicator, images.size(), position);
+                }
+            });
         }
 
         // Infos
@@ -220,6 +239,37 @@ public class PhotoDetailFragment extends Fragment {
                     }
                 }
             });
+        }
+    }
+
+    private void setupDetailDots(LinearLayout container, int count) {
+        container.removeAllViews();
+        float density = getResources().getDisplayMetrics().density;
+        int sizeSel = Math.round(8 * density);
+        int margin = Math.round(4 * density);
+        for (int i = 0; i < count; i++) {
+            View dot = new View(requireContext());
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sizeSel, sizeSel);
+            lp.setMargins(margin, 0, margin, 0);
+            dot.setLayoutParams(lp);
+            dot.setBackground(ContextCompat.getDrawable(requireContext(),
+                    i == 0 ? R.drawable.dot_selected : R.drawable.dot_unselected));
+            container.addView(dot);
+        }
+    }
+
+    private void updateDetailDots(LinearLayout container, int count, int selected) {
+        float density = getResources().getDisplayMetrics().density;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View dot = container.getChildAt(i);
+            boolean isSel = (i == selected);
+            int size = Math.round((isSel ? 8 : 6) * density);
+            int margin = Math.round(4 * density);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.setMargins(margin, 0, margin, 0);
+            dot.setLayoutParams(lp);
+            dot.setBackground(ContextCompat.getDrawable(requireContext(),
+                    isSel ? R.drawable.dot_selected : R.drawable.dot_unselected));
         }
     }
 

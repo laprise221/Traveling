@@ -28,6 +28,7 @@ public class Photo {
     private boolean isPublic;
     private String groupId;
     private String imageBase64;
+    private List<String> imageBase64List;
     @ServerTimestamp
     private Timestamp createdAt;
 
@@ -77,7 +78,17 @@ public class Photo {
     public boolean getIsPublic() { return isPublic; }
     public String getGroupId() { return groupId; }
     public String getImageBase64() { return imageBase64; }
+    public List<String> getImageBase64List() { return imageBase64List; }
     public Timestamp getCreatedAt() { return createdAt; }
+
+    /** Returns all images: list if multi-photo, falls back to single imageBase64 for older posts. */
+    @Exclude
+    public List<String> getImages() {
+        if (imageBase64List != null && !imageBase64List.isEmpty()) return imageBase64List;
+        List<String> single = new ArrayList<>();
+        if (imageBase64 != null && !imageBase64.isEmpty()) single.add(imageBase64);
+        return single;
+    }
 
     // ---- Excluded from Firestore (local-only) ----
 
@@ -110,6 +121,7 @@ public class Photo {
     public void setIsPublic(boolean isPublic) { this.isPublic = isPublic; }
     public void setGroupId(String groupId) { this.groupId = groupId; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
+    public void setImageBase64List(List<String> list) { this.imageBase64List = list; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
 
     public void setImageUri(Uri uri) { this.imageUri = uri; }
