@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
@@ -13,10 +14,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -78,6 +81,7 @@ public class MapFragment extends Fragment implements LocationListener {
     // Navigation overlay (parcours actif)
     private MaterialCardView navOverlay;
     private TextView navPathTitle, navStepLabel, navNextStep, navDistance, navTime;
+    private LinearLayout navRemainingSteps;
 
     // Preview card (aperçu au clic sur pin)
     private MaterialCardView pinPreviewCard;
@@ -93,6 +97,7 @@ public class MapFragment extends Fragment implements LocationListener {
     private LocationManager locationManager;
     private Marker userMarker;
     private List<Marker> activePathMarkers = new ArrayList<>();
+    private final SparseArray<Marker> stepMarkersByIndex = new SparseArray<>();
     private Polyline activeRoutePolyline;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -128,6 +133,7 @@ public class MapFragment extends Fragment implements LocationListener {
         navNextStep = view.findViewById(R.id.nav_next_step);
         navDistance = view.findViewById(R.id.nav_distance);
         navTime = view.findViewById(R.id.nav_time);
+        navRemainingSteps = view.findViewById(R.id.nav_remaining_steps);
 
         pinPreviewCard = view.findViewById(R.id.pin_preview_card);
         pinPreviewImage = view.findViewById(R.id.pin_preview_image);
@@ -369,6 +375,7 @@ public class MapFragment extends Fragment implements LocationListener {
 
         for (Marker m : activePathMarkers) mapView.getOverlays().remove(m);
         activePathMarkers.clear();
+        stepMarkersByIndex.clear();
         if (activeRoutePolyline != null) {
             mapView.getOverlays().remove(activeRoutePolyline);
             activeRoutePolyline = null;
@@ -390,6 +397,7 @@ public class MapFragment extends Fragment implements LocationListener {
             if (icon != null) marker.setIcon(icon);
             mapView.getOverlays().add(marker);
             activePathMarkers.add(marker);
+            stepMarkersByIndex.put(i, marker);
         }
 
         if (!points.isEmpty()) {
@@ -407,6 +415,7 @@ public class MapFragment extends Fragment implements LocationListener {
 
         for (Marker m : activePathMarkers) mapView.getOverlays().remove(m);
         activePathMarkers.clear();
+        stepMarkersByIndex.clear();
         if (activeRoutePolyline != null) {
             mapView.getOverlays().remove(activeRoutePolyline);
             activeRoutePolyline = null;
@@ -415,6 +424,8 @@ public class MapFragment extends Fragment implements LocationListener {
             mapView.getOverlays().remove(userMarker);
             userMarker = null;
         }
+        navRemainingSteps.removeAllViews();
+        navRemainingSteps.setVisibility(View.GONE);
         navOverlay.setVisibility(View.GONE);
         mapView.invalidate();
         Toast.makeText(requireContext(), "Parcours arrêté", Toast.LENGTH_SHORT).show();
@@ -580,6 +591,8 @@ public class MapFragment extends Fragment implements LocationListener {
             navNextStep.setText("Bravo 🎉");
             navDistance.setText("--");
             navTime.setText("--");
+            navRemainingSteps.removeAllViews();
+            navRemainingSteps.setVisibility(View.GONE);
             return;
         }
 
@@ -590,6 +603,7 @@ public class MapFragment extends Fragment implements LocationListener {
         if (userPos == null) {
             navDistance.setText("En attente du GPS...");
             navTime.setText("--");
+            updateRemainingStepsList(steps, idx);
             return;
         }
 
@@ -600,6 +614,13 @@ public class MapFragment extends Fragment implements LocationListener {
         if (distMeters <= STEP_REACHED_THRESHOLD_M) {
             Toast.makeText(requireContext(),
                     "Étape atteinte : " + target.getName(), Toast.LENGTH_SHORT).show();
+            Marker doneMarker = stepMarkersByIndex.get(idx);
+            if (doneMarker != null) {
+                mapView.getOverlays().remove(doneMarker);
+                activePathMarkers.remove(doneMarker);
+                stepMarkersByIndex.remove(idx);
+                mapView.invalidate();
+            }
             ActivePathRegistry.advanceStep();
             int newIdx = ActivePathRegistry.getCurrentStepIndex();
             if (newIdx == idx) {
@@ -607,6 +628,8 @@ public class MapFragment extends Fragment implements LocationListener {
                 navNextStep.setText("Bravo 🎉");
                 navDistance.setText("--");
                 navTime.setText("--");
+                navRemainingSteps.removeAllViews();
+                navRemainingSteps.setVisibility(View.GONE);
                 return;
             }
             updateNavigationOverlay(userPos);
@@ -615,6 +638,43 @@ public class MapFragment extends Fragment implements LocationListener {
 
         navDistance.setText(formatDistance(distMeters));
         navTime.setText(formatDuration(distMeters));
+        updateRemainingStepsList(steps, idx);
+    }
+
+    private void updateRemainingStepsList(List<PathStep> steps, int currentIdx) {
+        navRemainingSteps.removeAllViews();
+        int remaining = steps.size() - currentIdx - 1;
+        if (remaining <= 0) {
+            navRemainingSteps.setVisibility(View.GONE);
+            return;
+        }
+
+        View divider = new View(requireContext());
+        LinearLayout.LayoutParams divParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 1);
+        divParams.setMargins(0, 0, 0, 8);
+        divider.setLayoutParams(divParams);
+        divider.setBackgroundColor(Color.parseColor("#1A5B5CF6"));
+        navRemainingSteps.addView(divider);
+
+        TextView header = new TextView(requireContext());
+        header.setText("Étapes suivantes");
+        header.setTextSize(10f);
+        header.setTypeface(null, Typeface.BOLD);
+        header.setTextColor(Color.parseColor("#5B5CF6"));
+        header.setLetterSpacing(0.05f);
+        header.setPadding(0, 0, 0, 6);
+        navRemainingSteps.addView(header);
+
+        for (int i = currentIdx + 1; i < steps.size(); i++) {
+            TextView tv = new TextView(requireContext());
+            tv.setText("• " + (i + 1) + ". " + steps.get(i).getName());
+            tv.setTextSize(13f);
+            tv.setTextColor(Color.parseColor("#808090"));
+            tv.setPadding(0, 3, 0, 3);
+            navRemainingSteps.addView(tv);
+        }
+        navRemainingSteps.setVisibility(View.VISIBLE);
     }
 
     private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
