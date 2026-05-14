@@ -99,7 +99,11 @@
         android:id="@+id/navigation_my_publications"
         android:name="com.example.traveling.ui.profile.MyPublicationsFragment"
         android:label="Mes publications"
-        tools:layout="@layout/fragment_my_publications" />
+        tools:layout="@layout/fragment_my_publications">
+        <action
+            android:id="@+id/action_publications_to_share_photo"
+            app:destination="@id/navigation_share_photo" />
+    </fragment>
 
     <fragment
         android:id="@+id/navigation_groups"
