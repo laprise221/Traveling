@@ -48,6 +48,7 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.traveling.BuildConfig;
 import com.example.traveling.R;
+import com.example.traveling.worker.SchedulePublishHelper;
 import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.GroupRepository;
 import com.example.traveling.data.ImageUtils;
@@ -212,7 +213,7 @@ public class SharePhotoFragment extends Fragment {
         btnAiAnnotate.setOnClickListener(v -> annotateWithAI());
 
         view.findViewById(R.id.btn_back).setOnClickListener(v -> handleBack());
-        view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
+        view.findViewById(R.id.btn_publish).setOnClickListener(v -> showPublishOptionsDialog());
 
         if (!SessionManager.get().isAnonymous()) {
             loadUserGroups();
@@ -572,7 +573,49 @@ public class SharePhotoFragment extends Fragment {
         });
     }
 
-    private void publish() {
+    private void showPublishOptionsDialog() {
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Publier")
+                .setItems(new String[]{"Publier maintenant", "Planifier"}, (dialog, which) -> {
+                    if (which == 0) publish(null);
+                    else showScheduleDialog();
+                })
+                .show();
+    }
+
+    private void showScheduleDialog() {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        android.app.DatePickerDialog dateDialog = new android.app.DatePickerDialog(
+                requireContext(),
+                (datePicker, year, month, day) -> {
+                    android.app.TimePickerDialog timeDialog = new android.app.TimePickerDialog(
+                            requireContext(),
+                            (timePicker, hour, minute) -> {
+                                java.util.Calendar scheduled = java.util.Calendar.getInstance();
+                                scheduled.set(year, month, day, hour, minute, 0);
+                                scheduled.set(java.util.Calendar.MILLISECOND, 0);
+                                if (scheduled.getTimeInMillis() <= System.currentTimeMillis()) {
+                                    Toast.makeText(requireContext(),
+                                            "La date doit être dans le futur", Toast.LENGTH_SHORT).show();
+                                    return;
+                                }
+                                publish(new com.google.firebase.Timestamp(scheduled.getTime()));
+                            },
+                            cal.get(java.util.Calendar.HOUR_OF_DAY),
+                            cal.get(java.util.Calendar.MINUTE),
+                            true
+                    );
+                    timeDialog.show();
+                },
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH),
+                cal.get(java.util.Calendar.DAY_OF_MONTH)
+        );
+        dateDialog.getDatePicker().setMinDate(System.currentTimeMillis());
+        dateDialog.show();
+    }
+
+    private void publish(com.google.firebase.Timestamp scheduledDate) {
         String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
         String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
         String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
@@ -590,7 +633,8 @@ public class SharePhotoFragment extends Fragment {
             etLocation.requestFocus();
             return;
         }
-        String visibility = switchPublic.isChecked() ? "public" : "private";
+        String visibility = scheduledDate != null ? "scheduled"
+                : (switchPublic.isChecked() ? "public" : "private");
 
         requireView().findViewById(R.id.btn_publish).setEnabled(false);
 
@@ -638,6 +682,7 @@ public class SharePhotoFragment extends Fragment {
                 photo.setDate(today);
                 photo.setLocationType(getSelectedLocationType());
                 photo.setVisibility(visibility);
+                if (scheduledDate != null) photo.setScheduledPublishDate(scheduledDate);
                 photo.setImageBase64List(base64List);
                 photo.setImageBase64(base64List.get(0));
 
@@ -650,17 +695,16 @@ public class SharePhotoFragment extends Fragment {
                     @Override public void onResult(double lat, double lon) {
                         photo.setLatitude(lat);
                         photo.setLongitude(lon);
-                        savePhoto(photo);
+                        savePhoto(photo, scheduledDate);
                     }
-                    @Override public void onFailure() { savePhoto(photo); }
+                    @Override public void onFailure() { savePhoto(photo, scheduledDate); }
                 });
             });
         });
     }
 
-    private void savePhoto(Photo photo) {
+    private void savePhoto(Photo photo, com.google.firebase.Timestamp scheduledDate) {
         if (editingPhoto != null && editingPhoto.getId() != null) {
-            // Update existing
             FirestoreRepository.get().updatePhoto(editingPhoto.getId(), photo,
                     v -> {
                         if (!isAdded()) return;
@@ -674,17 +718,27 @@ public class SharePhotoFragment extends Fragment {
                         }
                     });
         } else {
-            // New publication
             FirestoreRepository.get().savePhoto(photo,
                     photoId -> {
                         if (!isAdded()) return;
                         for (String groupId : selectedGroupIds) {
                             GroupRepository.get().addGroupPost(groupId, photoId, null, null);
                         }
-                        String msg = selectedGroupIds.isEmpty()
-                                ? "Photo publiée !"
-                                : "Photo publiée et partagée dans " + selectedGroupIds.size() + " groupe(s) !";
-                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show();
+                        String msg;
+                        if (scheduledDate != null) {
+                            SchedulePublishHelper.schedule(requireContext(), photoId,
+                                    SchedulePublishHelper.COLLECTION_PHOTOS,
+                                    scheduledDate.toDate());
+                            String formatted = new java.text.SimpleDateFormat(
+                                    "dd MMM yyyy 'à' HH:mm", java.util.Locale.FRENCH)
+                                    .format(scheduledDate.toDate());
+                            msg = "Publication planifiée pour le " + formatted;
+                        } else {
+                            msg = selectedGroupIds.isEmpty()
+                                    ? "Photo publiée !"
+                                    : "Photo publiée et partagée dans " + selectedGroupIds.size() + " groupe(s) !";
+                        }
+                        Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
                         Navigation.findNavController(requireView()).navigateUp();
                     },
                     e -> {

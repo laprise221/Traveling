@@ -26,7 +26,8 @@ public class Photo {
     private int commentCount;
     private int favoriteCount;
     private boolean isPublic;
-    private String visibility; // "public", "private", "draft"
+    private String visibility; // "public", "private", "draft", "scheduled"
+    private Timestamp scheduledPublishDate;
     private String groupId;
     private String imageBase64;
     private List<String> imageBase64List;
@@ -78,6 +79,7 @@ public class Photo {
     public int getFavoriteCount() { return favoriteCount; }
     public boolean getIsPublic() { return isPublic; }
     public String getVisibility() { return visibility; }
+    public Timestamp getScheduledPublishDate() { return scheduledPublishDate; }
     public String getGroupId() { return groupId; }
     public String getImageBase64() { return imageBase64; }
     public List<String> getImageBase64List() { return imageBase64List; }
@@ -124,6 +126,9 @@ public class Photo {
     public void setVisibility(String visibility) {
         this.visibility = visibility;
         this.isPublic = "public".equals(visibility);
+    }
+    public void setScheduledPublishDate(Timestamp scheduledPublishDate) {
+        this.scheduledPublishDate = scheduledPublishDate;
     }
     public void setGroupId(String groupId) { this.groupId = groupId; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
