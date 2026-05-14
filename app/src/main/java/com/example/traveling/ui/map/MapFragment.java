@@ -3,8 +3,12 @@ package com.example.traveling.ui.map;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.widget.ImageView;
+
+import com.example.traveling.data.ImageUtils;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -667,11 +671,30 @@ public class MapFragment extends Fragment implements LocationListener {
     private void updateNavStepCards(List<PathStep> steps, int currentIdx) {
         navStepCards.removeAllViews();
         for (int i = currentIdx + 1; i < steps.size(); i++) {
+            PathStep step = steps.get(i);
             View card = LayoutInflater.from(requireContext())
                     .inflate(R.layout.item_step, navStepCards, false);
             ((TextView) card.findViewById(R.id.tv_step_number)).setText(String.valueOf(i + 1));
-            ((TextView) card.findViewById(R.id.tv_step_name)).setText(steps.get(i).getName());
+            ((TextView) card.findViewById(R.id.tv_step_name)).setText(step.getName());
             card.findViewById(R.id.btn_remove_step).setVisibility(View.GONE);
+
+            String desc = step.getDescription();
+            if (desc != null && !desc.isEmpty()) {
+                TextView tvDesc = card.findViewById(R.id.tv_step_desc);
+                tvDesc.setText(desc);
+                tvDesc.setVisibility(View.VISIBLE);
+            }
+
+            String b64 = step.getImageBase64();
+            if (b64 != null && !b64.isEmpty()) {
+                Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+                if (bmp != null) {
+                    ((ImageView) card.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
+                    card.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
+                    card.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
+                }
+            }
+
             navStepCards.addView(card);
         }
     }

@@ -1,5 +1,8 @@
 package com.example.traveling.ui.create;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,9 +14,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,6 +29,7 @@ import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
 import com.example.traveling.data.GeocodingUtils;
+import com.example.traveling.data.ImageUtils;
 import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.UserRepository;
 import com.example.traveling.model.PathStep;
@@ -40,6 +48,7 @@ import android.widget.CheckBox;
 import com.google.android.material.chip.Chip;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -80,6 +89,10 @@ public class CreatePathFragment extends Fragment {
     private Runnable pendingSearch;
     private double geocodedLat = 0;
     private double geocodedLon = 0;
+
+    private ActivityResultLauncher<String> stepPhotoLauncher;
+    private String pendingImageBase64 = null;
+    private ImageView dialogPhotoPreview = null;
 
     @Nullable
     @Override
@@ -128,6 +141,28 @@ public class CreatePathFragment extends Fragment {
         view.findViewById(R.id.btn_add_step).setOnClickListener(v -> showAddStepDialog());
 
         view.findViewById(R.id.btn_generate).setOnClickListener(v -> generatePath());
+
+        stepPhotoLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> {
+                    if (uri == null) return;
+                    executor.execute(() -> {
+                        String b64 = ImageUtils.uriToBase64(requireContext(), uri);
+                        mainHandler.post(() -> {
+                            if (!isAdded()) return;
+                            pendingImageBase64 = b64;
+                            if (dialogPhotoPreview != null && b64 != null) {
+                                Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+                                if (bmp != null) {
+                                    dialogPhotoPreview.setImageBitmap(bmp);
+                                    dialogPhotoPreview.setVisibility(View.VISIBLE);
+                                    View card = (View) dialogPhotoPreview.getParent();
+                                    card.setVisibility(View.VISIBLE);
+                                }
+                            }
+                        });
+                    });
+                });
     }
 
     private void setupCityAutocomplete() {
@@ -411,25 +446,36 @@ public class CreatePathFragment extends Fragment {
         });
     }
     private void showAddStepDialog() {
-        TextInputLayout inputLayout = new TextInputLayout(requireContext());
-        inputLayout.setHint("Nom de l'étape (ex: Tour Eiffel)");
-        inputLayout.setPadding(48, 16, 48, 0);
+        pendingImageBase64 = null;
 
-        TextInputEditText input = new TextInputEditText(requireContext());
-        inputLayout.addView(input);
+        View dialogView = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_add_step, null);
+
+        TextInputEditText etName = dialogView.findViewById(R.id.et_step_name);
+        TextInputEditText etDesc = dialogView.findViewById(R.id.et_step_desc);
+        dialogPhotoPreview = dialogView.findViewById(R.id.img_step_preview);
+
+        dialogView.findViewById(R.id.btn_pick_photo).setOnClickListener(v ->
+                stepPhotoLauncher.launch("image/*"));
 
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Ajouter une étape")
-                .setView(inputLayout)
+                .setView(dialogView)
                 .setPositiveButton("Ajouter", (dialog, which) -> {
-                    String stepName = input.getText() != null ? input.getText().toString().trim() : "";
-                    if (!stepName.isEmpty()) {
-                        PathStep step = new PathStep(stepName, "", 0, 0, null, null);
-                        steps.add(step);
-                        addStepView(step, steps.size());
-                    }
+                    String stepName = etName.getText() != null ? etName.getText().toString().trim() : "";
+                    if (stepName.isEmpty()) return;
+                    String stepDesc = etDesc.getText() != null ? etDesc.getText().toString().trim() : "";
+                    PathStep step = new PathStep(stepName, stepDesc, 0, 0, null, null);
+                    step.setImageBase64(pendingImageBase64);
+                    steps.add(step);
+                    addStepView(step, steps.size());
+                    pendingImageBase64 = null;
+                    dialogPhotoPreview = null;
                 })
-                .setNegativeButton("Annuler", null)
+                .setNegativeButton("Annuler", (dialog, which) -> {
+                    pendingImageBase64 = null;
+                    dialogPhotoPreview = null;
+                })
                 .show();
     }
 
@@ -442,6 +488,23 @@ public class CreatePathFragment extends Fragment {
 
         tvStepNumber.setText(String.valueOf(index));
         tvStepName.setText(step.getName());
+
+        String desc = step.getDescription();
+        if (desc != null && !desc.isEmpty()) {
+            TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
+            tvDesc.setText(desc);
+            tvDesc.setVisibility(View.VISIBLE);
+        }
+
+        String b64 = step.getImageBase64();
+        if (b64 != null && !b64.isEmpty()) {
+            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+            if (bmp != null) {
+                ((ImageView) stepView.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
+                stepView.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
+                tvStepNumber.setVisibility(View.GONE);
+            }
+        }
 
         stepView.findViewById(R.id.btn_remove_step).setOnClickListener(v -> {
             steps.remove(step);
@@ -717,8 +780,10 @@ public class CreatePathFragment extends Fragment {
             if (!first.has("point") || !first.has("name") || first.getString("name").isEmpty())
                 continue;
             JSONObject fp = first.getJSONObject("point");
-            picked.add(new PathStep(first.getString("name"), "",
-                    fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null));
+            PathStep firstStep = new PathStep(first.getString("name"), "",
+                    fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null);
+            firstStep.setXid(first.optString("xid", ""));
+            picked.add(firstStep);
             pois.remove(idx);
             break;
         }
@@ -728,6 +793,7 @@ public class CreatePathFragment extends Fragment {
             int bestIdx = -1;
             double bestLat = 0, bestLon = 0;
             String bestName = "";
+            String bestXid = "";
 
             for (int i = 0; i < pois.size(); i++) {
                 JSONObject poi = pois.get(i);
@@ -757,11 +823,14 @@ public class CreatePathFragment extends Fragment {
                     bestLat = pLat;
                     bestLon = pLon;
                     bestName = pName;
+                    bestXid = poi.optString("xid", "");
                 }
             }
 
             if (bestIdx == -1) break;
-            picked.add(new PathStep(bestName, "", bestLat, bestLon, null, null));
+            PathStep bestStep = new PathStep(bestName, "", bestLat, bestLon, null, null);
+            bestStep.setXid(bestXid);
+            picked.add(bestStep);
             pois.remove(bestIdx);
         }
 
@@ -930,9 +999,158 @@ public class CreatePathFragment extends Fragment {
             steps.add(step);
             addStepView(step, steps.size());
         }
+        enrichStepsWithDetails();
         Toast.makeText(requireContext(),
                 "Parcours « " + option.name + " » sélectionné",
                 Toast.LENGTH_SHORT).show();
+    }
+
+    private void enrichStepsWithDetails() {
+        String apiKey = "5ae2e3f221c38a28845f05b64ceacf3f82755ce118bd16981c7984e8";
+        for (int i = 0; i < steps.size(); i++) {
+            PathStep step = steps.get(i);
+            int stepIndex = i;
+            executor.execute(() -> {
+                try {
+                    String desc = "";
+                    String imageUrl = null;
+
+                    // 1. OpenTripMap details (si xid disponible)
+                    String xid = step.getXid();
+                    if (xid != null && !xid.isEmpty()) {
+                        try {
+                            URL otmUrl = new URL("https://api.opentripmap.com/0.1/en/places/xid/"
+                                    + xid + "?apikey=" + apiKey);
+                            HttpURLConnection otmConn = (HttpURLConnection) otmUrl.openConnection();
+                            otmConn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                            otmConn.setConnectTimeout(6000);
+                            otmConn.setReadTimeout(6000);
+                            if (otmConn.getResponseCode() == 200) {
+                                BufferedReader r = new BufferedReader(
+                                        new InputStreamReader(otmConn.getInputStream()));
+                                StringBuilder sb = new StringBuilder();
+                                String l;
+                                while ((l = r.readLine()) != null) sb.append(l);
+                                r.close();
+                                JSONObject detail = new JSONObject(sb.toString());
+                                Log.d("CreatePath", "OTM " + step.getName()
+                                        + " hasPreview=" + detail.has("preview")
+                                        + " hasImage=" + detail.has("image")
+                                        + " hasWiki=" + detail.has("wikipedia_extracts"));
+                                if (detail.has("wikipedia_extracts")) {
+                                    desc = detail.getJSONObject("wikipedia_extracts")
+                                            .optString("text", "");
+                                    if (desc.length() > 200) desc = desc.substring(0, 197) + "…";
+                                }
+                                if (desc.isEmpty() && detail.has("info")) {
+                                    desc = detail.getJSONObject("info").optString("descr", "");
+                                }
+                                if (detail.has("preview")) {
+                                    imageUrl = detail.getJSONObject("preview")
+                                            .optString("source", null);
+                                }
+                                if (imageUrl == null || imageUrl.isEmpty()) {
+                                    String img = detail.optString("image", "");
+                                    if (img.startsWith("http")) imageUrl = img;
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.w("CreatePath", "OTM detail failed for " + xid, e);
+                        }
+                    }
+
+                    // 2. Wikipedia REST API en fallback (meilleure couverture)
+                    if (imageUrl == null || desc.isEmpty()) {
+                        String encoded = URLEncoder.encode(step.getName(), "UTF-8");
+                        for (String lang : new String[]{"fr", "en"}) {
+                            try {
+                                URL wikiUrl = new URL("https://" + lang
+                                        + ".wikipedia.org/api/rest_v1/page/summary/" + encoded);
+                                HttpURLConnection wikiConn =
+                                        (HttpURLConnection) wikiUrl.openConnection();
+                                wikiConn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                                wikiConn.setConnectTimeout(6000);
+                                wikiConn.setReadTimeout(6000);
+                                if (wikiConn.getResponseCode() == 200) {
+                                    BufferedReader r = new BufferedReader(
+                                            new InputStreamReader(wikiConn.getInputStream()));
+                                    StringBuilder sb = new StringBuilder();
+                                    String l;
+                                    while ((l = r.readLine()) != null) sb.append(l);
+                                    r.close();
+                                    JSONObject wikiData = new JSONObject(sb.toString());
+                                    if (desc.isEmpty()) {
+                                        String extract = wikiData.optString("extract", "");
+                                        if (!extract.isEmpty()) {
+                                            desc = extract.length() > 200
+                                                    ? extract.substring(0, 197) + "…" : extract;
+                                        }
+                                    }
+                                    if (imageUrl == null && wikiData.has("thumbnail")) {
+                                        imageUrl = wikiData.getJSONObject("thumbnail")
+                                                .optString("source", null);
+                                    }
+                                    if (!desc.isEmpty() && imageUrl != null) break;
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    }
+
+                    Log.d("CreatePath", "Enriched " + step.getName()
+                            + " → desc=" + !desc.isEmpty() + " img=" + (imageUrl != null));
+
+                    Bitmap bmp = (imageUrl != null) ? downloadBitmap(imageUrl) : null;
+                    String finalDesc = desc;
+                    String b64 = bmp != null ? ImageUtils.bitmapToBase64(bmp) : null;
+
+                    mainHandler.post(() -> {
+                        if (!isAdded()) return;
+                        if (!finalDesc.isEmpty()) step.setDescription(finalDesc);
+                        if (b64 != null) step.setImageBase64(b64);
+                        if (stepIndex < stepsContainer.getChildCount()) {
+                            updateStepViewDetails(stepsContainer.getChildAt(stepIndex), step);
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.w("CreatePath", "Enrich " + step.getName() + " failed", e);
+                }
+            });
+        }
+    }
+
+    private Bitmap downloadBitmap(String urlStr) {
+        try {
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() != 200) return null;
+            InputStream is = conn.getInputStream();
+            Bitmap bmp = BitmapFactory.decodeStream(is);
+            is.close();
+            return bmp;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void updateStepViewDetails(View stepView, PathStep step) {
+        String desc = step.getDescription();
+        if (desc != null && !desc.isEmpty()) {
+            TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
+            tvDesc.setText(desc);
+            tvDesc.setVisibility(View.VISIBLE);
+        }
+        String b64 = step.getImageBase64();
+        if (b64 != null && !b64.isEmpty()) {
+            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+            if (bmp != null) {
+                ((ImageView) stepView.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
+                stepView.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
+                stepView.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
+            }
+        }
     }
 
     private String mapActivitesToKinds(List<String> activites) {

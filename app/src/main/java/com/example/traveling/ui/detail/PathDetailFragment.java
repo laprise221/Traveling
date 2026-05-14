@@ -17,11 +17,15 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.graphics.Bitmap;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+
+import com.example.traveling.data.ImageUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -151,6 +155,23 @@ public class PathDetailFragment extends Fragment {
         ((TextView) stepView.findViewById(R.id.tv_step_number)).setText(String.valueOf(index));
         ((TextView) stepView.findViewById(R.id.tv_step_name)).setText(step.getName());
         stepView.findViewById(R.id.btn_remove_step).setVisibility(View.GONE);
+
+        String desc = step.getDescription();
+        if (desc != null && !desc.isEmpty()) {
+            TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
+            tvDesc.setText(desc);
+            tvDesc.setVisibility(View.VISIBLE);
+        }
+
+        String b64 = step.getImageBase64();
+        if (b64 != null && !b64.isEmpty()) {
+            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+            if (bmp != null) {
+                ((ImageView) stepView.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
+                stepView.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
+                stepView.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
+            }
+        }
 
         container.addView(stepView);
     }

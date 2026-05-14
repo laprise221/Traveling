@@ -17,27 +17,73 @@
         android:gravity="center_vertical"
         android:padding="12dp">
 
-        <!-- Numéro d'étape -->
-        <TextView
-            android:id="@+id/tv_step_number"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:gravity="center"
-            android:text="1"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:textColor="@android:color/white"
-            android:background="@drawable/bg_step_circle" />
+        <!-- Slot gauche : photo OU numéro (52 × 52 dp) -->
+        <FrameLayout
+            android:layout_width="52dp"
+            android:layout_height="52dp">
 
-        <TextView
-            android:id="@+id/tv_step_name"
+            <!-- Numéro d'étape (visible par défaut) -->
+            <TextView
+                android:id="@+id/tv_step_number"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="1"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/white"
+                android:background="@drawable/bg_step_circle" />
+
+            <!-- Photo (visible uniquement si imageBase64 présent) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_step_photo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:cardCornerRadius="10dp"
+                app:cardElevation="0dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/img_step_photo"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:contentDescription="@null" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+        </FrameLayout>
+
+        <!-- Nom + description -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:textSize="14sp"
-            android:textColor="@color/colorTextPrimary" />
+            android:orientation="vertical"
+            android:layout_marginStart="12dp">
 
+            <TextView
+                android:id="@+id/tv_step_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary" />
+
+            <TextView
+                android:id="@+id/tv_step_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textSize="12sp"
+                android:textColor="@color/colorTextSecondary"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- Bouton suppression (masqué en mode détail/navigation) -->
         <ImageButton
             android:id="@+id/btn_remove_step"
             android:layout_width="32dp"
