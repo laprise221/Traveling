@@ -4,7 +4,6 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
@@ -38,6 +37,7 @@ import com.example.traveling.data.PhotoRegistry;
 import com.example.traveling.model.PathStep;
 import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.card.MaterialCardView;
 
 import org.json.JSONArray;
@@ -78,10 +78,11 @@ public class MapFragment extends Fragment implements LocationListener {
     private List<Marker> photoMarkers = new ArrayList<>();
     private List<Marker> pathMarkers = new ArrayList<>();
 
-    // Navigation overlay (parcours actif)
-    private MaterialCardView navOverlay;
+    // Navigation bottom sheet (parcours actif)
+    private LinearLayout navBottomSheet;
+    private BottomSheetBehavior<LinearLayout> bottomSheetBehavior;
     private TextView navPathTitle, navStepLabel, navNextStep, navDistance, navTime;
-    private LinearLayout navRemainingSteps;
+    private LinearLayout navStepCards;
 
     // Preview card (aperçu au clic sur pin)
     private MaterialCardView pinPreviewCard;
@@ -131,13 +132,16 @@ public class MapFragment extends Fragment implements LocationListener {
         mapView = view.findViewById(R.id.map_view);
         filterGroup = view.findViewById(R.id.filter_group_map);
 
-        navOverlay = view.findViewById(R.id.nav_overlay);
+        navBottomSheet = view.findViewById(R.id.nav_bottom_sheet);
         navPathTitle = view.findViewById(R.id.nav_path_title);
         navStepLabel = view.findViewById(R.id.nav_step_label);
         navNextStep = view.findViewById(R.id.nav_next_step);
         navDistance = view.findViewById(R.id.nav_distance);
         navTime = view.findViewById(R.id.nav_time);
-        navRemainingSteps = view.findViewById(R.id.nav_remaining_steps);
+        navStepCards = view.findViewById(R.id.nav_step_cards);
+
+        bottomSheetBehavior = BottomSheetBehavior.from(navBottomSheet);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
 
         pinPreviewCard = view.findViewById(R.id.pin_preview_card);
         pinPreviewImage = view.findViewById(R.id.pin_preview_image);
@@ -145,7 +149,7 @@ public class MapFragment extends Fragment implements LocationListener {
         pinPreviewTitle = view.findViewById(R.id.pin_preview_title);
         pinPreviewSubtitle = view.findViewById(R.id.pin_preview_subtitle);
 
-        view.findViewById(R.id.btn_stop_path).setOnClickListener(v -> stopActivePath());
+        navBottomSheet.findViewById(R.id.btn_stop_path).setOnClickListener(v -> stopActivePath());
         pinPreviewCard.setOnClickListener(v -> navigateToSelectedDetail());
 
         mapView.setTileSource(TileSourceFactory.MAPNIK);
@@ -354,7 +358,7 @@ public class MapFragment extends Fragment implements LocationListener {
         super.onResume();
         if (mapView != null) mapView.onResume();
         loadDataFromFirestore();
-        if (ActivePathRegistry.isActive() && navOverlay.getVisibility() != View.VISIBLE) {
+        if (ActivePathRegistry.isActive() && navBottomSheet.getVisibility() != View.VISIBLE) {
             startActivePathNavigation();
         }
         if (ActivePathRegistry.isActive()) {
@@ -374,7 +378,8 @@ public class MapFragment extends Fragment implements LocationListener {
         if (path == null) return;
 
         hidePinPreview();
-        navOverlay.setVisibility(View.VISIBLE);
+        navBottomSheet.setVisibility(View.VISIBLE);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
         navPathTitle.setText(path.getTitle());
 
         for (Marker m : activePathMarkers) mapView.getOverlays().remove(m);
@@ -438,9 +443,8 @@ public class MapFragment extends Fragment implements LocationListener {
             mapView.getOverlays().remove(userMarker);
             userMarker = null;
         }
-        navRemainingSteps.removeAllViews();
-        navRemainingSteps.setVisibility(View.GONE);
-        navOverlay.setVisibility(View.GONE);
+        navStepCards.removeAllViews();
+        navBottomSheet.setVisibility(View.GONE);
         mapView.invalidate();
         Toast.makeText(requireContext(), "Parcours arrêté", Toast.LENGTH_SHORT).show();
     }
@@ -606,8 +610,7 @@ public class MapFragment extends Fragment implements LocationListener {
             navNextStep.setText("Bravo 🎉");
             navDistance.setText("--");
             navTime.setText("--");
-            navRemainingSteps.removeAllViews();
-            navRemainingSteps.setVisibility(View.GONE);
+            navStepCards.removeAllViews();
             return;
         }
 
@@ -618,7 +621,7 @@ public class MapFragment extends Fragment implements LocationListener {
         if (userPos == null) {
             navDistance.setText("En attente du GPS...");
             navTime.setText("--");
-            updateRemainingStepsList(steps, idx);
+            updateNavStepCards(steps, idx);
             return;
         }
 
@@ -639,58 +642,38 @@ public class MapFragment extends Fragment implements LocationListener {
             lastLiveRoutePos = null;
             ActivePathRegistry.advanceStep();
             int newIdx = ActivePathRegistry.getCurrentStepIndex();
+            if (activeRoutePolyline != null) {
+                mapView.getOverlays().remove(activeRoutePolyline);
+                activeRoutePolyline = null;
+            }
             if (newIdx == idx) {
                 navStepLabel.setText("Parcours terminé !");
                 navNextStep.setText("Bravo 🎉");
                 navDistance.setText("--");
                 navTime.setText("--");
-                navRemainingSteps.removeAllViews();
-                navRemainingSteps.setVisibility(View.GONE);
+                navStepCards.removeAllViews();
                 return;
             }
+            fetchAndDrawRoute(steps.subList(newIdx, steps.size()));
             updateNavigationOverlay(userPos);
             return;
         }
 
         navDistance.setText(formatDistance(distMeters));
         navTime.setText(formatDuration(distMeters));
-        updateRemainingStepsList(steps, idx);
+        updateNavStepCards(steps, idx);
     }
 
-    private void updateRemainingStepsList(List<PathStep> steps, int currentIdx) {
-        navRemainingSteps.removeAllViews();
-        int remaining = steps.size() - currentIdx - 1;
-        if (remaining <= 0) {
-            navRemainingSteps.setVisibility(View.GONE);
-            return;
-        }
-
-        View divider = new View(requireContext());
-        LinearLayout.LayoutParams divParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 1);
-        divParams.setMargins(0, 0, 0, 8);
-        divider.setLayoutParams(divParams);
-        divider.setBackgroundColor(Color.parseColor("#1A5B5CF6"));
-        navRemainingSteps.addView(divider);
-
-        TextView header = new TextView(requireContext());
-        header.setText("Étapes suivantes");
-        header.setTextSize(10f);
-        header.setTypeface(null, Typeface.BOLD);
-        header.setTextColor(Color.parseColor("#5B5CF6"));
-        header.setLetterSpacing(0.05f);
-        header.setPadding(0, 0, 0, 6);
-        navRemainingSteps.addView(header);
-
+    private void updateNavStepCards(List<PathStep> steps, int currentIdx) {
+        navStepCards.removeAllViews();
         for (int i = currentIdx + 1; i < steps.size(); i++) {
-            TextView tv = new TextView(requireContext());
-            tv.setText("• " + (i + 1) + ". " + steps.get(i).getName());
-            tv.setTextSize(13f);
-            tv.setTextColor(Color.parseColor("#808090"));
-            tv.setPadding(0, 3, 0, 3);
-            navRemainingSteps.addView(tv);
+            View card = LayoutInflater.from(requireContext())
+                    .inflate(R.layout.item_step, navStepCards, false);
+            ((TextView) card.findViewById(R.id.tv_step_number)).setText(String.valueOf(i + 1));
+            ((TextView) card.findViewById(R.id.tv_step_name)).setText(steps.get(i).getName());
+            card.findViewById(R.id.btn_remove_step).setVisibility(View.GONE);
+            navStepCards.addView(card);
         }
-        navRemainingSteps.setVisibility(View.VISIBLE);
     }
 
     // ---------- Tracé live position → prochaine étape ----------

@@ -1,6 +1,15 @@
 package com.example.traveling.ui.detail;
 
+import android.content.Intent;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Typeface;
+import android.graphics.pdf.PdfDocument;
+import android.net.Uri;
+import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.util.Log;
 import android.os.Bundle;
 import android.os.Handler;
@@ -11,6 +20,11 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.FileProvider;
+
+import java.io.File;
+import java.io.FileOutputStream;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -111,6 +125,8 @@ public class PathDetailFragment extends Fragment {
                 Navigation.findNavController(v).navigate(R.id.navigation_map);
             });
         }
+
+        view.findViewById(R.id.btn_export_pdf).setOnClickListener(v -> exportToPdf(path));
 
         LinearLayout stepsContainer = view.findViewById(R.id.steps_list_container);
 
@@ -295,6 +311,238 @@ public class PathDetailFragment extends Fragment {
         polyline.getOutlinePaint().setAntiAlias(true);
         mapView.getOverlayManager().add(polyline);
         mapView.invalidate();
+    }
+
+    private void exportToPdf(TravelPath path) {
+        Toast.makeText(requireContext(), "Génération du PDF…", Toast.LENGTH_SHORT).show();
+        executor.execute(() -> {
+            try {
+                final int W = 595, H = 842;
+                final float M = 40f;
+                final float CW = W - 2 * M;
+
+                PdfDocument doc = new PdfDocument();
+                int pageNum = 1;
+                PdfDocument.Page page = doc.startPage(new PdfDocument.PageInfo.Builder(W, H, pageNum).create());
+                Canvas cv = page.getCanvas();
+                float y = M;
+
+                // --- Paints ---
+                Paint appLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                appLabelPaint.setTextSize(9f);
+                appLabelPaint.setColor(0xFF9CA3AF);
+                appLabelPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                appLabelPaint.setLetterSpacing(0.1f);
+
+                Paint titlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                titlePaint.setTextSize(22f);
+                titlePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                titlePaint.setColor(0xFF5B5CF6);
+
+                Paint subtitlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                subtitlePaint.setTextSize(12f);
+                subtitlePaint.setColor(0xFF6B7280);
+
+                Paint dividerPaint = new Paint();
+                dividerPaint.setColor(0xFFE5E7EB);
+                dividerPaint.setStrokeWidth(1f);
+
+                Paint tagBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                tagBgPaint.setColor(0xFFEEF2FF);
+
+                Paint tagTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                tagTextPaint.setTextSize(10f);
+                tagTextPaint.setColor(0xFF5B5CF6);
+                tagTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+
+                Paint sectionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                sectionPaint.setTextSize(14f);
+                sectionPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                sectionPaint.setColor(0xFF1E1B4B);
+
+                TextPaint bodyPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+                bodyPaint.setTextSize(11f);
+                bodyPaint.setColor(0xFF374151);
+
+                Paint stepBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                stepBgPaint.setColor(0xFF5B5CF6);
+
+                Paint stepNumPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                stepNumPaint.setTextSize(10f);
+                stepNumPaint.setColor(0xFFFFFFFF);
+                stepNumPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                stepNumPaint.setTextAlign(Paint.Align.CENTER);
+
+                Paint stepNamePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                stepNamePaint.setTextSize(12f);
+                stepNamePaint.setColor(0xFF1E1B4B);
+
+                TextPaint stepDescPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+                stepDescPaint.setTextSize(10f);
+                stepDescPaint.setColor(0xFF6B7280);
+
+                Paint footerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                footerPaint.setTextSize(8f);
+                footerPaint.setColor(0xFF9CA3AF);
+                footerPaint.setTextAlign(Paint.Align.CENTER);
+
+                // --- Contenu ---
+
+                // App label
+                cv.drawText("TRAVELING", M, y + 9f, appLabelPaint);
+                y += 18f;
+
+                // Titre
+                cv.drawText(path.getTitle(), M, y + 22f, titlePaint);
+                y += 32f;
+
+                // Sous-titre : ville + auteur
+                String subtitle = path.getCity() != null ? path.getCity() : "";
+                if (path.getAuthorName() != null && !path.getAuthorName().isEmpty()) {
+                    subtitle += "  ·  Par " + path.getAuthorName();
+                }
+                cv.drawText(subtitle, M, y + 12f, subtitlePaint);
+                y += 22f;
+
+                // Divider
+                cv.drawLine(M, y, W - M, y, dividerPaint);
+                y += 12f;
+
+                // Tags (duration, budget, difficulty)
+                String[] tags = {path.getDuration(), path.getBudget(), path.getDifficulty()};
+                float tagX = M;
+                float tagH = 20f;
+                for (String tag : tags) {
+                    if (tag == null || tag.isEmpty()) continue;
+                    float tagW = tagTextPaint.measureText(tag) + 14f;
+                    cv.drawRoundRect(new RectF(tagX, y, tagX + tagW, y + tagH), 5f, 5f, tagBgPaint);
+                    cv.drawText(tag, tagX + 7f, y + 14f, tagTextPaint);
+                    tagX += tagW + 6f;
+                }
+                y += tagH + 16f;
+
+                // Divider
+                cv.drawLine(M, y, W - M, y, dividerPaint);
+                y += 12f;
+
+                // Description
+                String desc = path.getDescription();
+                if (desc != null && !desc.isEmpty()) {
+                    cv.drawText("Description", M, y + 14f, sectionPaint);
+                    y += 22f;
+
+                    StaticLayout descLayout = StaticLayout.Builder
+                            .obtain(desc, 0, desc.length(), bodyPaint, (int) CW)
+                            .setLineSpacing(2f, 1f)
+                            .build();
+
+                    if (y + descLayout.getHeight() > H - M - 20) {
+                        doc.finishPage(page);
+                        page = doc.startPage(new PdfDocument.PageInfo.Builder(W, H, ++pageNum).create());
+                        cv = page.getCanvas();
+                        y = M;
+                    }
+                    cv.save();
+                    cv.translate(M, y);
+                    descLayout.draw(cv);
+                    cv.restore();
+                    y += descLayout.getHeight() + 14f;
+
+                    cv.drawLine(M, y, W - M, y, dividerPaint);
+                    y += 12f;
+                }
+
+                // Étapes
+                List<PathStep> steps = path.getSteps();
+                if (steps != null && !steps.isEmpty()) {
+                    cv.drawText("Étapes  (" + steps.size() + ")", M, y + 14f, sectionPaint);
+                    y += 24f;
+
+                    float circleR = 12f;
+                    float nameX = M + circleR * 2 + 10f;
+
+                    for (int i = 0; i < steps.size(); i++) {
+                        PathStep step = steps.get(i);
+                        float rowH = 36f;
+
+                        String stepDesc2 = step.getDescription();
+                        StaticLayout sdLayout = null;
+                        if (stepDesc2 != null && !stepDesc2.isEmpty()) {
+                            sdLayout = StaticLayout.Builder
+                                    .obtain(stepDesc2, 0, stepDesc2.length(), stepDescPaint,
+                                            (int) (CW - circleR * 2 - 10f))
+                                    .setLineSpacing(1f, 1f)
+                                    .build();
+                            rowH += sdLayout.getHeight();
+                        }
+
+                        if (y + rowH > H - M - 20) {
+                            doc.finishPage(page);
+                            page = doc.startPage(new PdfDocument.PageInfo.Builder(W, H, ++pageNum).create());
+                            cv = page.getCanvas();
+                            y = M;
+                        }
+
+                        float circleY = y + circleR;
+                        cv.drawCircle(M + circleR, circleY, circleR, stepBgPaint);
+                        cv.drawText(String.valueOf(i + 1), M + circleR, circleY + 4f, stepNumPaint);
+
+                        String name = step.getName() != null ? step.getName() : "";
+                        cv.drawText(name, nameX, y + 16f, stepNamePaint);
+
+                        if (sdLayout != null) {
+                            cv.save();
+                            cv.translate(nameX, y + 22f);
+                            sdLayout.draw(cv);
+                            cv.restore();
+                        }
+                        y += rowH;
+                    }
+                }
+
+                // Footer
+                cv.drawLine(M, H - 28f, W - M, H - 28f, dividerPaint);
+                cv.drawText("Exporté depuis Traveling", W / 2f, H - 16f, footerPaint);
+
+                doc.finishPage(page);
+
+                // Écriture du fichier
+                String safeName = path.getTitle().replaceAll("[^a-zA-Z0-9_\\-]", "_");
+                File dir = requireContext().getExternalFilesDir(null);
+                if (dir == null) dir = requireContext().getCacheDir();
+                File pdfFile = new File(dir, "parcours_" + safeName + ".pdf");
+                FileOutputStream fos = new FileOutputStream(pdfFile);
+                doc.writeTo(fos);
+                fos.close();
+                doc.close();
+
+                File finalFile = pdfFile;
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    Uri uri = FileProvider.getUriForFile(
+                            requireContext(), "com.example.traveling.fileprovider", finalFile);
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setDataAndType(uri, "application/pdf");
+                    intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    try {
+                        startActivity(intent);
+                    } catch (android.content.ActivityNotFoundException e) {
+                        Intent share = new Intent(Intent.ACTION_SEND);
+                        share.setType("application/pdf");
+                        share.putExtra(Intent.EXTRA_STREAM, uri);
+                        share.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(share, "Partager le PDF"));
+                    }
+                });
+
+            } catch (Exception e) {
+                Log.e("PathDetail", "PDF export error", e);
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    Toast.makeText(requireContext(), "Erreur lors de l'export PDF", Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
 
     @Override
