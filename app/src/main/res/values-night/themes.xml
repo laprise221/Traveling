@@ -4,8 +4,7 @@
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorPrimaryContainer">@color/colorPrimaryDark</item>
         <item name="colorOnPrimaryContainer">@color/colorPrimaryLight</item>
-        <item name="colorSecondary">@color/colorSecondary</item>
-        <item name="colorOnSecondary">@color/white</item>
+
         <item name="android:statusBarColor">@color/colorPrimaryDark</item>
     </style>
 </resources>

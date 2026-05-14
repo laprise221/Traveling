@@ -257,16 +257,28 @@ public class MapFragment extends Fragment implements LocationListener {
         for (Marker m : photoMarkers) mapView.getOverlays().remove(m);
         photoMarkers.clear();
 
+        // Only keep photos with valid coordinates
+        List<Photo> validPhotos = new ArrayList<>();
         for (Photo photo : photos) {
             if (photo.getLatitude() == 0 && photo.getLongitude() == 0) continue;
+            validPhotos.add(photo);
+        }
 
+        // Group indices by rounded position (3 decimal places ≈ 111m)
+        java.util.Map<String, List<Integer>> posGroups = new java.util.HashMap<>();
+        for (int i = 0; i < validPhotos.size(); i++) {
+            Photo p = validPhotos.get(i);
+            String key = Math.round(p.getLatitude() * 1000) + "," + Math.round(p.getLongitude() * 1000);
+            posGroups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
+        }
+
+        // Build markers
+        for (Photo photo : validPhotos) {
             Marker marker = new Marker(mapView);
             marker.setPosition(new GeoPoint(photo.getLatitude(), photo.getLongitude()));
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
             Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_marker_photo);
             if (icon != null) marker.setIcon(icon);
-
             marker.setOnMarkerClickListener((m, mv) -> {
                 selectedPhoto = photo;
                 selectedPath = null;
@@ -274,6 +286,21 @@ public class MapFragment extends Fragment implements LocationListener {
                 return true;
             });
             photoMarkers.add(marker);
+        }
+
+        // Spread overlapping markers in a small circle so each is clickable
+        double spreadRadius = 0.0005; // ~55 m — visible at city zoom, discreet at country zoom
+        for (List<Integer> group : posGroups.values()) {
+            if (group.size() <= 1) continue;
+            for (int k = 0; k < group.size(); k++) {
+                int idx = group.get(k);
+                double baseLat = validPhotos.get(idx).getLatitude();
+                double baseLon = validPhotos.get(idx).getLongitude();
+                double angle = 2 * Math.PI * k / group.size();
+                photoMarkers.get(idx).setPosition(new GeoPoint(
+                        baseLat + spreadRadius * Math.cos(angle),
+                        baseLon + spreadRadius * Math.sin(angle)));
+            }
         }
     }
 
@@ -316,6 +343,7 @@ public class MapFragment extends Fragment implements LocationListener {
     public void onResume() {
         super.onResume();
         if (mapView != null) mapView.onResume();
+        loadDataFromFirestore();
         if (ActivePathRegistry.isActive() && navOverlay.getVisibility() != View.VISIBLE) {
             startActivePathNavigation();
         }

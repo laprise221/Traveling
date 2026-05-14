@@ -76,6 +76,9 @@ public class FirestoreRepository {
         data.put("isPublic", photo.getIsPublic());
         data.put("groupId", photo.getGroupId());
         data.put("imageBase64", photo.getImageBase64());
+        if (photo.getImageBase64List() != null && !photo.getImageBase64List().isEmpty()) {
+            data.put("imageBase64List", photo.getImageBase64List());
+        }
         data.put("createdAt", FieldValue.serverTimestamp());
 
         db.collection("photos").add(data)

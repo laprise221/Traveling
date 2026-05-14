@@ -1,6 +1,7 @@
 package com.example.traveling.ui.create;
 
 import android.Manifest;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -18,11 +19,7 @@ import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.CheckBox;
 import android.widget.Filter;
-
-import java.util.ArrayList;
-import java.util.List;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,6 +29,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -43,6 +42,9 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.traveling.BuildConfig;
 import com.example.traveling.R;
@@ -52,6 +54,7 @@ import com.example.traveling.data.ImageUtils;
 import com.example.traveling.model.Group;
 import com.example.traveling.model.Photo;
 import com.example.traveling.session.SessionManager;
+import com.example.traveling.ui.explore.PhotoCarouselAdapter;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.example.traveling.data.GeocodingUtils;
@@ -61,9 +64,18 @@ import com.google.firebase.auth.FirebaseUser;
 public class SharePhotoFragment extends Fragment {
 
     private static final String GROQ_API_KEY = BuildConfig.GROQ_API_KEY;
+    private static final int MAX_PHOTOS = 10;
 
-    private ImageView ivPreview;
+    // Views
+    private ViewPager2 vpPreview;
+    private LinearLayout createDotsIndicator;
+    private TextView tvPhotoCount;
     private View pickPlaceholder;
+    private FrameLayout photoPickerZone;
+    private LinearLayout layoutThumbnailsSection;
+    private TextView tvImageCount;
+    private com.google.android.material.button.MaterialButton btnAddPhoto;
+    private RecyclerView rvThumbnails;
     private com.google.android.material.textfield.TextInputEditText etTitle, etDescription;
     private AutoCompleteTextView etLocation;
     private ArrayAdapter<String> locationAdapter;
@@ -76,47 +88,63 @@ public class SharePhotoFragment extends Fragment {
     private TextView tvNoGroups;
     private com.google.android.material.button.MaterialButton btnAiAnnotate;
 
-    private Uri selectedImageUri = null;
-    private Bitmap selectedBitmap = null;
+    // Data
+    private final List<Object> selectedImages = new ArrayList<>(); // Uri or Bitmap
     private final List<String> selectedGroupIds = new ArrayList<>();
     private List<Group> userGroups = new ArrayList<>();
 
+    // Adapters
+    private PhotoCarouselAdapter previewCarouselAdapter;
+    private SelectedPhotoAdapter selectedPhotoAdapter;
+
+    // Launchers
     private final ActivityResultLauncher<Intent> galleryLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-                if (result.getResultCode() == android.app.Activity.RESULT_OK
-                        && result.getData() != null) {
-                    selectedImageUri = result.getData().getData();
-                    selectedBitmap = null;
-                    ivPreview.setImageURI(selectedImageUri);
-                    showPreview();
+                if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
+                    Intent data = result.getData();
+                    int remaining = MAX_PHOTOS - selectedImages.size();
+                    if (data.getClipData() != null) {
+                        ClipData clip = data.getClipData();
+                        int count = Math.min(clip.getItemCount(), remaining);
+                        for (int i = 0; i < count; i++) {
+                            selectedImages.add(clip.getItemAt(i).getUri());
+                        }
+                        if (clip.getItemCount() > remaining) {
+                            Toast.makeText(requireContext(),
+                                    "Maximum " + MAX_PHOTOS + " photos. Seules les " + remaining + " premières ont été ajoutées.",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    } else if (data.getData() != null && remaining > 0) {
+                        selectedImages.add(data.getData());
+                    }
+                    updatePreviewUI();
                 }
             });
 
     private final ActivityResultLauncher<Void> cameraLauncher =
             registerForActivityResult(new ActivityResultContracts.TakePicturePreview(), bitmap -> {
-                if (bitmap != null) {
-                    selectedBitmap = bitmap;
-                    selectedImageUri = null;
-                    ivPreview.setImageBitmap(bitmap);
-                    showPreview();
+                if (bitmap != null && selectedImages.size() < MAX_PHOTOS) {
+                    selectedImages.add(bitmap);
+                    updatePreviewUI();
+                } else if (bitmap != null) {
+                    Toast.makeText(requireContext(), "Maximum " + MAX_PHOTOS + " photos atteint", Toast.LENGTH_SHORT).show();
                 }
             });
 
     private final ActivityResultLauncher<String> fileLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
-                if (uri != null) {
-                    selectedImageUri = uri;
-                    selectedBitmap = null;
-                    ivPreview.setImageURI(uri);
-                    showPreview();
+                if (uri != null && selectedImages.size() < MAX_PHOTOS) {
+                    selectedImages.add(uri);
+                    updatePreviewUI();
+                } else if (uri != null) {
+                    Toast.makeText(requireContext(), "Maximum " + MAX_PHOTOS + " photos atteint", Toast.LENGTH_SHORT).show();
                 }
             });
 
     private final ActivityResultLauncher<String> cameraPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (granted) cameraLauncher.launch(null);
-                else Toast.makeText(requireContext(),
-                        "Permission caméra refusée", Toast.LENGTH_SHORT).show();
+                else Toast.makeText(requireContext(), "Permission caméra refusée", Toast.LENGTH_SHORT).show();
             });
 
     @Nullable
@@ -130,23 +158,54 @@ public class SharePhotoFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        ivPreview = view.findViewById(R.id.iv_preview);
+        photoPickerZone = view.findViewById(R.id.photo_picker_zone);
+        vpPreview = view.findViewById(R.id.vp_preview);
+        createDotsIndicator = view.findViewById(R.id.create_dots_indicator);
+        tvPhotoCount = view.findViewById(R.id.tv_photo_count);
         pickPlaceholder = view.findViewById(R.id.pick_placeholder);
+        layoutThumbnailsSection = view.findViewById(R.id.layout_thumbnails_section);
+        tvImageCount = view.findViewById(R.id.tv_image_count);
+        btnAddPhoto = view.findViewById(R.id.btn_add_photo);
+        rvThumbnails = view.findViewById(R.id.rv_thumbnails);
+
         etTitle = view.findViewById(R.id.et_title);
         etDescription = view.findViewById(R.id.et_description);
         etLocation = view.findViewById(R.id.et_location);
         setupLocationAutocomplete();
         chipGroupType = view.findViewById(R.id.chip_group_type);
         switchPublic = view.findViewById(R.id.switch_public);
-
         layoutGroupCheckboxes = view.findViewById(R.id.layout_group_checkboxes);
         tvNoGroups = view.findViewById(R.id.tv_no_groups);
-
         btnAiAnnotate = view.findViewById(R.id.btn_ai_annotate);
-        btnAiAnnotate.setOnClickListener(v -> annotateWithAI());
 
-        FrameLayout photoZone = view.findViewById(R.id.photo_picker_zone);
-        photoZone.setOnClickListener(v -> showImageSourceDialog());
+        // Preview carousel
+        previewCarouselAdapter = new PhotoCarouselAdapter();
+        vpPreview.setAdapter(previewCarouselAdapter);
+        vpPreview.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                updateDots(createDotsIndicator, selectedImages.size(), position);
+                tvPhotoCount.setText((position + 1) + "/" + selectedImages.size());
+            }
+        });
+
+        // Thumbnails strip
+        selectedPhotoAdapter = new SelectedPhotoAdapter(selectedImages, pos -> {
+            selectedImages.remove(pos);
+            selectedPhotoAdapter.notifyItemRemoved(pos);
+            selectedPhotoAdapter.notifyItemRangeChanged(pos, selectedImages.size());
+            updatePreviewUI();
+        });
+        rvThumbnails.setLayoutManager(
+                new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
+        rvThumbnails.setAdapter(selectedPhotoAdapter);
+
+        // Click handlers
+        photoPickerZone.setOnClickListener(v -> {
+            if (selectedImages.isEmpty()) showImageSourceDialog();
+        });
+        btnAddPhoto.setOnClickListener(v -> showImageSourceDialog());
+        btnAiAnnotate.setOnClickListener(v -> annotateWithAI());
 
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
                 Navigation.findNavController(v).navigateUp());
@@ -159,6 +218,78 @@ public class SharePhotoFragment extends Fragment {
         }
     }
 
+    private void updatePreviewUI() {
+        if (selectedImages.isEmpty()) {
+            pickPlaceholder.setVisibility(View.VISIBLE);
+            vpPreview.setVisibility(View.GONE);
+            createDotsIndicator.setVisibility(View.GONE);
+            tvPhotoCount.setVisibility(View.GONE);
+            layoutThumbnailsSection.setVisibility(View.GONE);
+            photoPickerZone.setClickable(true);
+            return;
+        }
+
+        pickPlaceholder.setVisibility(View.GONE);
+        vpPreview.setVisibility(View.VISIBLE);
+        layoutThumbnailsSection.setVisibility(View.VISIBLE);
+        photoPickerZone.setClickable(false);
+
+        // Update carousel
+        previewCarouselAdapter.setImages(selectedImages);
+
+        // Dots (only when 2+ images)
+        int count = selectedImages.size();
+        if (count > 1) {
+            createDotsIndicator.setVisibility(View.VISIBLE);
+            tvPhotoCount.setVisibility(View.VISIBLE);
+            int current = vpPreview.getCurrentItem();
+            setupDots(createDotsIndicator, count);
+            updateDots(createDotsIndicator, count, Math.min(current, count - 1));
+            tvPhotoCount.setText((Math.min(current, count - 1) + 1) + "/" + count);
+        } else {
+            createDotsIndicator.setVisibility(View.GONE);
+            tvPhotoCount.setVisibility(View.GONE);
+        }
+
+        // Thumbnails
+        selectedPhotoAdapter.notifyDataSetChanged();
+        tvImageCount.setText(count + "/" + MAX_PHOTOS + " photo" + (count > 1 ? "s" : ""));
+        btnAddPhoto.setVisibility(count < MAX_PHOTOS ? View.VISIBLE : View.GONE);
+    }
+
+    private void setupDots(LinearLayout container, int count) {
+        container.removeAllViews();
+        int sizeSel = dpToPx(8);
+        int sizeUnsel = dpToPx(6);
+        int margin = dpToPx(4);
+        for (int i = 0; i < count; i++) {
+            View dot = new View(requireContext());
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sizeSel, sizeSel);
+            lp.setMargins(margin, 0, margin, 0);
+            dot.setLayoutParams(lp);
+            dot.setBackground(ContextCompat.getDrawable(requireContext(), R.drawable.dot_unselected));
+            container.addView(dot);
+        }
+    }
+
+    private void updateDots(LinearLayout container, int count, int selected) {
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View dot = container.getChildAt(i);
+            boolean isSelected = (i == selected);
+            int size = dpToPx(isSelected ? 8 : 6);
+            int margin = dpToPx(4);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.setMargins(margin, 0, margin, 0);
+            dot.setLayoutParams(lp);
+            dot.setBackground(ContextCompat.getDrawable(requireContext(),
+                    isSelected ? R.drawable.dot_selected : R.drawable.dot_unselected));
+        }
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
     private void setupLocationAutocomplete() {
         locationAdapter = new ArrayAdapter<String>(requireContext(),
                 android.R.layout.simple_dropdown_item_1line, new ArrayList<>()) {
@@ -166,8 +297,8 @@ public class SharePhotoFragment extends Fragment {
             public Filter getFilter() {
                 return new Filter() {
                     @Override
-                    protected Filter.FilterResults performFiltering(CharSequence constraint) {
-                        Filter.FilterResults r = new Filter.FilterResults();
+                    protected FilterResults performFiltering(CharSequence constraint) {
+                        FilterResults r = new FilterResults();
                         List<String> all = new ArrayList<>();
                         for (int i = 0; i < getCount(); i++) all.add(getItem(i));
                         r.values = all;
@@ -175,7 +306,7 @@ public class SharePhotoFragment extends Fragment {
                         return r;
                     }
                     @Override
-                    protected void publishResults(CharSequence constraint, Filter.FilterResults results) {
+                    protected void publishResults(CharSequence constraint, FilterResults results) {
                         notifyDataSetChanged();
                     }
                 };
@@ -273,14 +404,14 @@ public class SharePhotoFragment extends Fragment {
                 .setItems(options, (dialog, which) -> {
                     switch (which) {
                         case 0:
-                            galleryLauncher.launch(new Intent(
-                                    Intent.ACTION_PICK,
-                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI));
+                            Intent intent = new Intent(Intent.ACTION_PICK,
+                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                            galleryLauncher.launch(intent);
                             break;
                         case 1:
                             if (ContextCompat.checkSelfPermission(requireContext(),
-                                    Manifest.permission.CAMERA)
-                                    == PackageManager.PERMISSION_GRANTED) {
+                                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                                 cameraLauncher.launch(null);
                             } else {
                                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
@@ -294,18 +425,13 @@ public class SharePhotoFragment extends Fragment {
                 .show();
     }
 
-    private void showPreview() {
-        ivPreview.setVisibility(View.VISIBLE);
-        pickPlaceholder.setVisibility(View.GONE);
-    }
-
     private void publish() {
         String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
         String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
         String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
 
-        if (selectedImageUri == null && selectedBitmap == null) {
-            Toast.makeText(requireContext(), "Veuillez choisir une photo", Toast.LENGTH_SHORT).show();
+        if (selectedImages.isEmpty()) {
+            Toast.makeText(requireContext(), "Veuillez choisir au moins une photo", Toast.LENGTH_SHORT).show();
             return;
         }
         if (title.isEmpty()) {
@@ -319,69 +445,76 @@ public class SharePhotoFragment extends Fragment {
             return;
         }
 
-        // Convert image to Base64
-        String imageBase64;
-        if (selectedBitmap != null) {
-            imageBase64 = ImageUtils.bitmapToBase64(selectedBitmap);
-        } else {
-            imageBase64 = ImageUtils.uriToBase64(requireContext(), selectedImageUri);
-        }
-        if (imageBase64 == null) {
-            Toast.makeText(requireContext(), "Erreur lors du traitement de l'image", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Get current user info
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        String authorId = user != null ? user.getUid() : "";
-        String authorName = "Moi";
-        if (user != null && user.getDisplayName() != null && !user.getDisplayName().isEmpty()) {
-            authorName = user.getDisplayName();
-        }
-
-        String today = new java.text.SimpleDateFormat("dd MMM yyyy",
-                java.util.Locale.FRENCH).format(new java.util.Date());
-
-        boolean isPublic = switchPublic.isChecked();
-
-        // Build Photo object
-        Photo photo = new Photo();
-        photo.setTitle(title);
-        photo.setDescription(description);
-        photo.setAuthorId(authorId);
-        photo.setAuthorName(authorName);
-        photo.setLocationName(location);
-        photo.setDate(today);
-        photo.setLocationType(getSelectedLocationType());
-        photo.setIsPublic(isPublic);
-        photo.setImageBase64(imageBase64);
-        if (selectedBitmap != null) photo.setImageBitmap(selectedBitmap);
-        else photo.setImageUri(selectedImageUri);
-
-        // Disable publish button to prevent double-tap
         requireView().findViewById(R.id.btn_publish).setEnabled(false);
 
-        // Géocodage du lieu avant sauvegarde
-        GeocodingUtils.geocode(location, new GeocodingUtils.GeocodingCallback() {
-            @Override
-            public void onResult(double latitude, double longitude) {
-                photo.setLatitude(latitude);
-                photo.setLongitude(longitude);
-                savePhoto(photo);
+        // Encode all images to Base64 on background thread
+        executor.execute(() -> {
+            List<String> base64List = new ArrayList<>();
+            for (Object img : selectedImages) {
+                String b64;
+                if (img instanceof Bitmap) {
+                    b64 = ImageUtils.bitmapToBase64((Bitmap) img);
+                } else {
+                    b64 = ImageUtils.uriToBase64(requireContext(), (Uri) img);
+                }
+                if (b64 != null) base64List.add(b64);
             }
-            @Override
-            public void onFailure() {
-                savePhoto(photo); // sauvegarde sans coordonnées si échec
+
+            if (base64List.isEmpty()) {
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    requireView().findViewById(R.id.btn_publish).setEnabled(true);
+                    Toast.makeText(requireContext(), "Erreur lors du traitement des images", Toast.LENGTH_SHORT).show();
+                });
+                return;
             }
+
+            mainHandler.post(() -> {
+                if (!isAdded()) return;
+
+                FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                String authorId = user != null ? user.getUid() : "";
+                String authorName = "Moi";
+                if (user != null && user.getDisplayName() != null && !user.getDisplayName().isEmpty()) {
+                    authorName = user.getDisplayName();
+                }
+
+                String today = new java.text.SimpleDateFormat("dd MMM yyyy",
+                        java.util.Locale.FRENCH).format(new java.util.Date());
+
+                Photo photo = new Photo();
+                photo.setTitle(title);
+                photo.setDescription(description);
+                photo.setAuthorId(authorId);
+                photo.setAuthorName(authorName);
+                photo.setLocationName(location);
+                photo.setDate(today);
+                photo.setLocationType(getSelectedLocationType());
+                photo.setIsPublic(switchPublic.isChecked());
+                photo.setImageBase64List(base64List);
+                photo.setImageBase64(base64List.get(0));
+
+                // Set local preview from first selected image
+                Object first = selectedImages.get(0);
+                if (first instanceof Bitmap) photo.setImageBitmap((Bitmap) first);
+                else photo.setImageUri((Uri) first);
+
+                GeocodingUtils.geocode(location, new GeocodingUtils.GeocodingCallback() {
+                    @Override public void onResult(double lat, double lon) {
+                        photo.setLatitude(lat);
+                        photo.setLongitude(lon);
+                        savePhoto(photo);
+                    }
+                    @Override public void onFailure() { savePhoto(photo); }
+                });
+            });
         });
     }
 
     private void savePhoto(Photo photo) {
-        // Save to Firestore
         FirestoreRepository.get().savePhoto(photo,
                 photoId -> {
                     if (!isAdded()) return;
-                    // Share to each selected group
                     for (String groupId : selectedGroupIds) {
                         GroupRepository.get().addGroupPost(groupId, photoId, null, null);
                     }
@@ -400,7 +533,7 @@ public class SharePhotoFragment extends Fragment {
     }
 
     private void annotateWithAI() {
-        if (selectedImageUri == null && selectedBitmap == null) {
+        if (selectedImages.isEmpty()) {
             Toast.makeText(requireContext(), "Veuillez d'abord choisir une photo", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -409,11 +542,13 @@ public class SharePhotoFragment extends Fragment {
         String location = etLocation.getText() != null ? etLocation.getText().toString().trim() : "";
         String locationType = getSelectedLocationType();
 
-        String imageBase64;
-        if (selectedBitmap != null) {
-            imageBase64 = ImageUtils.bitmapToBase64(selectedBitmap);
+        // Use first image for AI annotation
+        Object firstImg = selectedImages.get(0);
+        final String imageBase64;
+        if (firstImg instanceof Bitmap) {
+            imageBase64 = ImageUtils.bitmapToBase64((Bitmap) firstImg);
         } else {
-            imageBase64 = ImageUtils.uriToBase64(requireContext(), selectedImageUri);
+            imageBase64 = ImageUtils.uriToBase64(requireContext(), (Uri) firstImg);
         }
         if (imageBase64 == null) {
             Toast.makeText(requireContext(), "Erreur lors du traitement de l'image", Toast.LENGTH_SHORT).show();
@@ -423,7 +558,6 @@ public class SharePhotoFragment extends Fragment {
         btnAiAnnotate.setEnabled(false);
         btnAiAnnotate.setText("Génération en cours…");
 
-        final String imgB64 = imageBase64;
         executor.execute(() -> {
             try {
                 StringBuilder prompt = new StringBuilder();
@@ -438,7 +572,7 @@ public class SharePhotoFragment extends Fragment {
                 textPart.put("text", prompt.toString());
 
                 org.json.JSONObject imageUrl = new org.json.JSONObject();
-                imageUrl.put("url", "data:image/jpeg;base64," + imgB64);
+                imageUrl.put("url", "data:image/jpeg;base64," + imageBase64);
 
                 org.json.JSONObject imagePart = new org.json.JSONObject();
                 imagePart.put("type", "image_url");
