@@ -99,6 +99,10 @@ public class MapFragment extends Fragment implements LocationListener {
     private List<Marker> activePathMarkers = new ArrayList<>();
     private final SparseArray<Marker> stepMarkersByIndex = new SparseArray<>();
     private Polyline activeRoutePolyline;
+    private Polyline liveSegmentPolyline;
+    private GeoPoint lastLiveRoutePos;
+    private boolean liveRouteFetching = false;
+    private static final double LIVE_ROUTE_MIN_MOVE_M = 20.0;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -380,6 +384,11 @@ public class MapFragment extends Fragment implements LocationListener {
             mapView.getOverlays().remove(activeRoutePolyline);
             activeRoutePolyline = null;
         }
+        if (liveSegmentPolyline != null) {
+            mapView.getOverlays().remove(liveSegmentPolyline);
+            liveSegmentPolyline = null;
+        }
+        lastLiveRoutePos = null;
 
         List<PathStep> steps = path.getSteps();
         List<GeoPoint> points = new ArrayList<>();
@@ -420,6 +429,11 @@ public class MapFragment extends Fragment implements LocationListener {
             mapView.getOverlays().remove(activeRoutePolyline);
             activeRoutePolyline = null;
         }
+        if (liveSegmentPolyline != null) {
+            mapView.getOverlays().remove(liveSegmentPolyline);
+            liveSegmentPolyline = null;
+        }
+        lastLiveRoutePos = null;
         if (userMarker != null) {
             mapView.getOverlays().remove(userMarker);
             userMarker = null;
@@ -577,6 +591,7 @@ public class MapFragment extends Fragment implements LocationListener {
 
         if (ActivePathRegistry.isActive()) {
             updateNavigationOverlay(userPos);
+            maybeRefreshLiveRoute(userPos);
         }
     }
 
@@ -621,6 +636,7 @@ public class MapFragment extends Fragment implements LocationListener {
                 stepMarkersByIndex.remove(idx);
                 mapView.invalidate();
             }
+            lastLiveRoutePos = null;
             ActivePathRegistry.advanceStep();
             int newIdx = ActivePathRegistry.getCurrentStepIndex();
             if (newIdx == idx) {
@@ -675,6 +691,94 @@ public class MapFragment extends Fragment implements LocationListener {
             navRemainingSteps.addView(tv);
         }
         navRemainingSteps.setVisibility(View.VISIBLE);
+    }
+
+    // ---------- Tracé live position → prochaine étape ----------
+
+    private void maybeRefreshLiveRoute(GeoPoint userPos) {
+        if (liveRouteFetching) return;
+        TravelPath path = ActivePathRegistry.getActivePath();
+        if (path == null) return;
+        int idx = ActivePathRegistry.getCurrentStepIndex();
+        List<PathStep> steps = path.getSteps();
+        if (idx >= steps.size()) return;
+        PathStep target = steps.get(idx);
+        if (target.getLatitude() == 0 && target.getLongitude() == 0) return;
+
+        if (lastLiveRoutePos != null) {
+            double moved = distanceMeters(
+                    lastLiveRoutePos.getLatitude(), lastLiveRoutePos.getLongitude(),
+                    userPos.getLatitude(), userPos.getLongitude());
+            if (moved < LIVE_ROUTE_MIN_MOVE_M) return;
+        }
+
+        lastLiveRoutePos = userPos;
+        liveRouteFetching = true;
+        fetchLiveSegment(userPos, target);
+    }
+
+    private void fetchLiveSegment(GeoPoint from, PathStep to) {
+        executor.execute(() -> {
+            try {
+                String urlStr = "https://router.project-osrm.org/route/v1/foot/"
+                        + from.getLongitude() + "," + from.getLatitude() + ";"
+                        + to.getLongitude() + "," + to.getLatitude()
+                        + "?overview=full&geometries=geojson";
+
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+
+                List<GeoPoint> pts = new ArrayList<>();
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) sb.append(line);
+                    reader.close();
+
+                    JSONObject json = new JSONObject(sb.toString());
+                    if ("Ok".equals(json.optString("code", ""))) {
+                        JSONArray routes = json.getJSONArray("routes");
+                        if (routes.length() > 0) {
+                            JSONArray coords = routes.getJSONObject(0)
+                                    .getJSONObject("geometry").getJSONArray("coordinates");
+                            for (int i = 0; i < coords.length(); i++) {
+                                JSONArray c = coords.getJSONArray(i);
+                                pts.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
+                            }
+                        }
+                    }
+                }
+
+                if (pts.isEmpty()) {
+                    pts.add(from);
+                    pts.add(new GeoPoint(to.getLatitude(), to.getLongitude()));
+                }
+
+                List<GeoPoint> finalPts = pts;
+                mainHandler.post(() -> {
+                    liveRouteFetching = false;
+                    if (!isAdded()) return;
+                    if (liveSegmentPolyline != null) {
+                        mapView.getOverlays().remove(liveSegmentPolyline);
+                    }
+                    liveSegmentPolyline = new Polyline(mapView);
+                    liveSegmentPolyline.setPoints(finalPts);
+                    liveSegmentPolyline.getOutlinePaint().setColor(Color.parseColor("#FF6B35"));
+                    liveSegmentPolyline.getOutlinePaint().setStrokeWidth(12f);
+                    liveSegmentPolyline.getOutlinePaint().setAntiAlias(true);
+                    mapView.getOverlayManager().add(liveSegmentPolyline);
+                    mapView.invalidate();
+                });
+            } catch (Exception e) {
+                Log.e("MapFragment", "Live segment fetch error", e);
+                mainHandler.post(() -> liveRouteFetching = false);
+            }
+        });
     }
 
     private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
