@@ -1,7 +1,9 @@
 package com.example.traveling.ui.create;
 
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.provider.MediaStore;
 import android.os.Bundle;
@@ -60,6 +62,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -82,10 +86,12 @@ public class CreatePathFragment extends Fragment {
     private TextView tvDureeValue;
     private ChipGroup chipGroupDifficulty;
     private ChipGroup chipGroupActivities;
+    private ChipGroup chipGroupMeteo;
     private CheckBox cbChaleur;
     private CheckBox cbPluie;
     private TextView tvMeteo;
     private TextView tvResume;
+    private View cardMeteoResume;
     private TextView tvOptionsTitle;
     private LinearLayout optionsContainer;
     private LinearLayout stepsContainer;
@@ -99,6 +105,9 @@ public class CreatePathFragment extends Fragment {
     private Runnable pendingSearch;
     private double geocodedLat = 0;
     private double geocodedLon = 0;
+
+    private final List<View> optionCardViews = new ArrayList<>();
+    private final List<Integer> optionCardColors = new ArrayList<>();
 
     private ActivityResultLauncher<String> stepPhotoLauncher;
     private String pendingImageBase64 = null;
@@ -132,9 +141,17 @@ public class CreatePathFragment extends Fragment {
         chipGroupActivities = view.findViewById(R.id.chip_group_activities);
         cbChaleur = view.findViewById(R.id.cb_chaleur);
         cbPluie = view.findViewById(R.id.cb_pluie);
+        chipGroupMeteo = view.findViewById(R.id.chip_group_meteo);
         tvMeteo = view.findViewById(R.id.tv_meteo);
         tvResume = view.findViewById(R.id.tv_resume);
+        cardMeteoResume = view.findViewById(R.id.card_meteo_resume);
         tvOptionsTitle = view.findViewById(R.id.tv_options_title);
+
+        // Synchroniser les chips météo avec les checkboxes (utilisés dans generatePath)
+        ((Chip) view.findViewById(R.id.chip_chaleur))
+                .setOnCheckedChangeListener((btn, checked) -> cbChaleur.setChecked(checked));
+        ((Chip) view.findViewById(R.id.chip_pluie))
+                .setOnCheckedChangeListener((btn, checked) -> cbPluie.setChecked(checked));
         optionsContainer = view.findViewById(R.id.options_container);
         stepsContainer = view.findViewById(R.id.steps_container);
         switchPublic = view.findViewById(R.id.switch_public);
@@ -432,7 +449,7 @@ public class CreatePathFragment extends Fragment {
                 // ---- ÉTAPE 4 : Filtrer selon météo et budget ----
                 List<JSONObject> filteredPOIs = filterPOIs(
                         poiResults, temperature, weatherCode,
-                        sensibleChaleur, sensiblePluie, budget
+                        sensibleChaleur, sensiblePluie, budget, maxSteps
                 );
 
                 // ---- ÉTAPE 5 : Générer 3 options (économique, équilibré, confort) ----
@@ -441,15 +458,17 @@ public class CreatePathFragment extends Fragment {
 
                 double maxRouteKm = maxWalkKm(effort, dureeMax);
                 List<PathOption> generatedOptions = new ArrayList<>();
+                // costPerStep = frais annexes par étape (boisson, transport local)
+                // le coût d'entrée réel est estimé par estimatePOICost() selon la catégorie
                 generatedOptions.add(buildOption(
                         "Économique", filteredPOIs,
-                        Math.max(2, maxSteps - 1), true, false, 8, maxRouteKm));
+                        Math.max(2, maxSteps - 1), true, false, 3, maxRouteKm));
                 generatedOptions.add(buildOption(
                         "Équilibré", filteredPOIs,
-                        maxSteps, false, false, 15, maxRouteKm));
+                        maxSteps, false, false, 5, maxRouteKm));
                 generatedOptions.add(buildOption(
                         "Confort", filteredPOIs,
-                        maxSteps + 1, false, true, 25, maxRouteKm));
+                        maxSteps + 1, false, true, 10, maxRouteKm));
 
                 // ---- ÉTAPE 6 : Construire le résumé ----
                 String meteoInfo;
@@ -476,10 +495,8 @@ public class CreatePathFragment extends Fragment {
                     }
 
                     tvMeteo.setText("Météo : " + finalMeteoInfo);
-                    tvMeteo.setVisibility(View.VISIBLE);
-
                     tvResume.setText("Critères : ~" + dureeMax + "h · " + budget + "€ max · " + effort);
-                    tvResume.setVisibility(View.VISIBLE);
+                    cardMeteoResume.setVisibility(View.VISIBLE);
 
                     displayOptions(nonEmpty, dureeMax);
 
@@ -798,7 +815,7 @@ public class CreatePathFragment extends Fragment {
     private List<JSONObject> filterPOIs(JSONArray poiResults,
                                         double temperature, int weatherCode,
                                         boolean sensibleChaleur, boolean sensiblePluie,
-                                        int budget) throws JSONException {
+                                        int budget, int maxSteps) throws JSONException {
 
         boolean ilPleut = weatherCode >= 51 && weatherCode <= 67;
         boolean ilFaitChaud = temperature > 30;
@@ -835,8 +852,9 @@ public class CreatePathFragment extends Fragment {
                 if (estExterieur) continue;
             }
 
-            int rate = poi.optInt("rate", 0);
-            if (budget < 50 && rate >= 3) continue;
+            // Exclure les lieux dont le coût d'entrée dépasse le budget par étape
+            int perStepBudget = budget / Math.max(2, maxSteps);
+            if (estimatePOICost(poi) > perStepBudget) continue;
 
             filtered.add(poi);
         }
@@ -937,14 +955,16 @@ public class CreatePathFragment extends Fragment {
 
     private PathOption buildOption(String name, List<JSONObject> pool, int maxSteps,
                                    boolean excludeExpensive, boolean preferClose,
-                                   int costPerStep, double maxRouteKm) throws JSONException {
+                                   int overheadPerStep, double maxRouteKm) throws JSONException {
         List<JSONObject> pois = new ArrayList<>();
         for (JSONObject poi : pool) {
-            if (excludeExpensive && poi.optInt("rate", 0) >= 3) continue;
+            // Pour "Économique", exclure les lieux payants (musées, restos)
+            if (excludeExpensive && estimatePOICost(poi) >= 10) continue;
             pois.add(poi);
         }
 
         List<PathStep> picked = new ArrayList<>();
+        java.util.Map<PathStep, Integer> admissionCosts = new java.util.IdentityHashMap<>();
 
         for (int idx = 0; idx < pois.size(); idx++) {
             JSONObject first = pois.get(idx);
@@ -954,6 +974,7 @@ public class CreatePathFragment extends Fragment {
             PathStep firstStep = new PathStep(first.getString("name"), "",
                     fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null);
             firstStep.setXid(first.optString("xid", ""));
+            admissionCosts.put(firstStep, estimatePOICost(first));
             picked.add(firstStep);
             pois.remove(idx);
             break;
@@ -965,6 +986,7 @@ public class CreatePathFragment extends Fragment {
             double bestLat = 0, bestLon = 0;
             String bestName = "";
             String bestXid = "";
+            int bestCost = 0;
 
             for (int i = 0; i < pois.size(); i++) {
                 JSONObject poi = pois.get(i);
@@ -995,12 +1017,14 @@ public class CreatePathFragment extends Fragment {
                     bestLon = pLon;
                     bestName = pName;
                     bestXid = poi.optString("xid", "");
+                    bestCost = estimatePOICost(poi);
                 }
             }
 
             if (bestIdx == -1) break;
             PathStep bestStep = new PathStep(bestName, "", bestLat, bestLon, null, null);
             bestStep.setXid(bestXid);
+            admissionCosts.put(bestStep, bestCost);
             picked.add(bestStep);
             pois.remove(bestIdx);
         }
@@ -1017,7 +1041,7 @@ public class CreatePathFragment extends Fragment {
                         picked.get(i).getLatitude(), picked.get(i).getLongitude());
             }
             if (total <= maxRouteKm) break;
-            picked.remove(picked.size() - 1); // retire la dernière étape
+            picked.remove(picked.size() - 1);
         }
 
         double totalKm = 0;
@@ -1027,8 +1051,23 @@ public class CreatePathFragment extends Fragment {
                     picked.get(i).getLatitude(), picked.get(i).getLongitude());
         }
 
-        int estBudget = picked.size() * costPerStep;
+        // Budget = coût d'entrée réel par lieu + frais annexes (boissons, transport local)
+        int estBudget = 0;
+        for (PathStep s : picked) {
+            estBudget += admissionCosts.getOrDefault(s, 0) + overheadPerStep;
+        }
         return new PathOption(name, picked, totalKm, estBudget);
+    }
+
+    private int estimatePOICost(JSONObject poi) {
+        String kinds = poi.optString("kinds", "");
+        if (kinds.contains("restaurants") || kinds.contains("foods")) return 18;
+        if (kinds.contains("cafes")) return 5;
+        if (kinds.contains("museums")) return 12;
+        if (kinds.contains("theatres_and_entertainments") || kinds.contains("cinemas")) return 10;
+        if (kinds.contains("amusements")) return 8;
+        // monuments, historic, architecture, natural, parks, view_points → gratuits
+        return 0;
     }
 
     /**
@@ -1127,43 +1166,114 @@ public class CreatePathFragment extends Fragment {
 
     private void displayOptions(List<PathOption> options, int dureeMax) {
         optionsContainer.removeAllViews();
+        optionCardViews.clear();
+        optionCardColors.clear();
         selectedOption = null;
         steps.clear();
         stepsContainer.removeAllViews();
 
         tvOptionsTitle.setVisibility(View.VISIBLE);
 
-        for (PathOption option : options) {
+        for (int pos = 0; pos < options.size(); pos++) {
+            PathOption option = options.get(pos);
             View card = LayoutInflater.from(requireContext())
                     .inflate(R.layout.item_path_option, optionsContainer, false);
 
-            TextView tvName = card.findViewById(R.id.tv_option_name);
-            TextView tvMetrics = card.findViewById(R.id.tv_option_metrics);
-            TextView tvSteps = card.findViewById(R.id.tv_option_steps);
-            com.google.android.material.button.MaterialButton btnSelect =
-                    card.findViewById(R.id.btn_option_select);
+            // Couleur, icône et sous-titre selon le type
+            int color;
+            String icon, subtitle;
+            switch (option.name.toLowerCase()) {
+                case "économique":
+                    color = Color.parseColor("#22C55E");
+                    icon = "🌿";
+                    subtitle = "Sites gratuits · budget maîtrisé";
+                    break;
+                case "confort":
+                    color = Color.parseColor("#F59E0B");
+                    icon = "✨";
+                    subtitle = "Expérience complète · lieux premium";
+                    break;
+                default: // équilibré
+                    color = Color.parseColor("#6366F1");
+                    icon = "⚖";
+                    subtitle = "Bon rapport qualité / expérience";
+                    break;
+            }
 
-            tvName.setText(option.name);
-            tvMetrics.setText(option.steps.size() + " étapes · ~"
-                    + String.format("%.1f", option.totalDistanceKm) + " km · ~"
-                    + option.estimatedBudget + " €");
+            // Bande de couleur en haut
+            card.findViewById(R.id.view_option_accent).setBackgroundColor(color);
 
+            // Icône + fond coloré
+            TextView tvIcon = card.findViewById(R.id.tv_option_icon);
+            tvIcon.setText(icon);
+            tvIcon.getBackground().setTint(color);
+
+            // Nom + sous-titre
+            ((TextView) card.findViewById(R.id.tv_option_name)).setText(option.name);
+            ((TextView) card.findViewById(R.id.tv_option_subtitle)).setText(subtitle);
+
+            // Badge "Recommandé" sur l'option du milieu
+            if (pos == options.size() / 2) {
+                com.google.android.material.chip.Chip chip = card.findViewById(R.id.chip_recommended);
+                chip.setVisibility(View.VISIBLE);
+                chip.setChipBackgroundColor(ColorStateList.valueOf(color));
+            }
+
+            // Métriques séparées
+            ((TextView) card.findViewById(R.id.tv_opt_steps_count))
+                    .setText(String.valueOf(option.steps.size()));
+            ((TextView) card.findViewById(R.id.tv_opt_distance))
+                    .setText(String.format("%.1f km", option.totalDistanceKm));
+            ((TextView) card.findViewById(R.id.tv_opt_budget))
+                    .setText("~" + option.estimatedBudget + " €");
+
+            // Séquence des étapes
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < option.steps.size(); i++) {
                 if (i > 0) sb.append(" → ");
                 sb.append(option.steps.get(i).getName());
             }
-            tvSteps.setText(sb.toString());
+            ((TextView) card.findViewById(R.id.tv_option_steps)).setText(sb.toString());
 
-            btnSelect.setOnClickListener(v -> selectOption(option));
-            card.setOnClickListener(v -> selectOption(option));
+            // Bouton couleur de l'option
+            com.google.android.material.button.MaterialButton btnSelect =
+                    card.findViewById(R.id.btn_option_select);
+            btnSelect.setBackgroundTintList(ColorStateList.valueOf(color));
+            btnSelect.setOnClickListener(v -> selectOption(option, card, color));
+            card.setOnClickListener(v -> selectOption(option, card, color));
 
+            optionCardViews.add(card);
+            optionCardColors.add(color);
             optionsContainer.addView(card);
         }
     }
 
-    private void selectOption(PathOption option) {
+    private void selectOption(PathOption option, View selectedCard, int color) {
         selectedOption = option;
+
+        // Reset visual de toutes les cartes
+        for (int i = 0; i < optionCardViews.size(); i++) {
+            com.google.android.material.card.MaterialCardView cv =
+                    (com.google.android.material.card.MaterialCardView) optionCardViews.get(i);
+            cv.setStrokeColor(Color.parseColor("#E5E7EB"));
+            cv.setStrokeWidth(2);
+            cv.setCardElevation(2f);
+            com.google.android.material.button.MaterialButton btn =
+                    cv.findViewById(R.id.btn_option_select);
+            btn.setText("Choisir ce parcours");
+            btn.setBackgroundTintList(ColorStateList.valueOf(optionCardColors.get(i)));
+        }
+
+        // Mettre en valeur la carte sélectionnée
+        com.google.android.material.card.MaterialCardView selectedCv =
+                (com.google.android.material.card.MaterialCardView) selectedCard;
+        selectedCv.setStrokeColor(color);
+        selectedCv.setStrokeWidth(4);
+        selectedCv.setCardElevation(6f);
+        com.google.android.material.button.MaterialButton btnSelected =
+                selectedCard.findViewById(R.id.btn_option_select);
+        btnSelected.setText("✓ Parcours sélectionné");
+
         steps.clear();
         stepsContainer.removeAllViews();
         for (PathStep step : option.steps) {
@@ -1171,9 +1281,6 @@ public class CreatePathFragment extends Fragment {
             addStepView(step, steps.size());
         }
         enrichStepsWithDetails();
-        Toast.makeText(requireContext(),
-                "Parcours « " + option.name + " » sélectionné",
-                Toast.LENGTH_SHORT).show();
     }
 
     private void enrichStepsWithDetails() {
@@ -1270,16 +1377,39 @@ public class CreatePathFragment extends Fragment {
                     Log.d("CreatePath", "Enriched " + step.getName()
                             + " → desc=" + !desc.isEmpty() + " img=" + (imageUrl != null));
 
+                    // 3. Prix réel depuis Overpass (tags OSM fee/charge)
+                    String priceInfo = fetchPriceFromOverpass(
+                            step.getLatitude(), step.getLongitude());
+
                     Bitmap bmp = (imageUrl != null) ? downloadBitmap(imageUrl) : null;
-                    String finalDesc = desc;
-                    String b64 = bmp != null ? ImageUtils.bitmapToBase64(bmp) : null;
+                    String finalDesc = priceInfo != null
+                            ? (priceInfo + (desc.isEmpty() ? "" : "\n" + desc))
+                            : desc;
+                    String finalImageUrl = imageUrl;
 
                     mainHandler.post(() -> {
                         if (!isAdded()) return;
                         if (!finalDesc.isEmpty()) step.setDescription(finalDesc);
-                        if (b64 != null) step.setImageBase64(b64);
-                        if (stepIndex < stepsContainer.getChildCount()) {
-                            updateStepViewDetails(stepsContainer.getChildAt(stepIndex), step);
+                        // Store URL (not base64) to keep Firestore document small
+                        if (finalImageUrl != null) step.setImageUrl(finalImageUrl);
+                        View stepView = stepIndex < stepsContainer.getChildCount()
+                                ? stepsContainer.getChildAt(stepIndex) : null;
+                        if (stepView != null) {
+                            // Show description
+                            if (!finalDesc.isEmpty()) {
+                                TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
+                                tvDesc.setText(finalDesc);
+                                tvDesc.setVisibility(View.VISIBLE);
+                            }
+                            // Show downloaded bitmap directly in creation view
+                            if (bmp != null) {
+                                ((ImageView) stepView.findViewById(R.id.img_step_photo))
+                                        .setImageBitmap(bmp);
+                                stepView.findViewById(R.id.card_step_photo)
+                                        .setVisibility(View.VISIBLE);
+                                stepView.findViewById(R.id.tv_step_number)
+                                        .setVisibility(View.GONE);
+                            }
                         }
                     });
                 } catch (Exception e) {
@@ -1306,22 +1436,55 @@ public class CreatePathFragment extends Fragment {
         }
     }
 
-    private void updateStepViewDetails(View stepView, PathStep step) {
-        String desc = step.getDescription();
-        if (desc != null && !desc.isEmpty()) {
-            TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
-            tvDesc.setText(desc);
-            tvDesc.setVisibility(View.VISIBLE);
-        }
-        String b64 = step.getImageBase64();
-        if (b64 != null && !b64.isEmpty()) {
-            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
-            if (bmp != null) {
-                ((ImageView) stepView.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
-                stepView.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
-                stepView.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
+    private String fetchPriceFromOverpass(double lat, double lon) {
+        if (lat == 0 && lon == 0) return null;
+        try {
+            String query = "[out:json][timeout:8];"
+                    + "(node(around:150," + lat + "," + lon + ")[\"fee\"];"
+                    + "way(around:150," + lat + "," + lon + ")[\"fee\"];);"
+                    + "out tags;";
+            URL url = new URL("https://overpass-api.de/api/interpreter?data="
+                    + URLEncoder.encode(query, "UTF-8"));
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() != 200) return null;
+
+            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = r.readLine()) != null) sb.append(l);
+            r.close();
+
+            JSONArray elements = new JSONObject(sb.toString()).optJSONArray("elements");
+            if (elements == null) return null;
+
+            for (int i = 0; i < elements.length(); i++) {
+                JSONObject tags = elements.getJSONObject(i).optJSONObject("tags");
+                if (tags == null) continue;
+                String fee = tags.optString("fee", "");
+                if (fee.isEmpty()) continue;
+                if ("no".equals(fee)) return "Entrée gratuite";
+                String charge = tags.optString("charge", "");
+                if (!charge.isEmpty()) return "Entrée : " + simplifyCharge(charge);
+                return "Entrée payante";
             }
+        } catch (Exception e) {
+            Log.d("CreatePath", "Overpass price fetch failed: " + e.getMessage());
         }
+        return null;
+    }
+
+    private String simplifyCharge(String charge) {
+        // Normaliser la devise
+        String c = charge.replaceAll("(?i)euros?", "€").replaceAll("(?i)eur\\b", "€").trim();
+        // Extraire le premier montant (ex: "adult: 15 €; child: 7 €" → "15 €")
+        Matcher m = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*€").matcher(c);
+        if (m.find()) return m.group(1).replace(",", ".") + " €";
+        m = Pattern.compile("€\\s*(\\d+(?:[.,]\\d+)?)").matcher(c);
+        if (m.find()) return m.group(1).replace(",", ".") + " €";
+        return c.length() > 40 ? c.substring(0, 37) + "…" : c;
     }
 
     private String mapActivitesToKinds(List<String> activites) {

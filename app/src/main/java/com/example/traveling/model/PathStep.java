@@ -9,6 +9,7 @@ public class PathStep {
     private String duration;
     private String timeSlot;
     private String imageBase64;
+    private String imageUrl;
     private String xid;
 
     public PathStep() {}
@@ -30,6 +31,7 @@ public class PathStep {
     public String getDuration() { return duration; }
     public String getTimeSlot() { return timeSlot; }
     public String getImageBase64() { return imageBase64; }
+    public String getImageUrl() { return imageUrl; }
 
     public void setName(String name) { this.name = name; }
     public void setDescription(String description) { this.description = description; }
@@ -38,6 +40,7 @@ public class PathStep {
     public void setDuration(String duration) { this.duration = duration; }
     public void setTimeSlot(String timeSlot) { this.timeSlot = timeSlot; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
 
     public String getXid() { return xid; }
     public void setXid(String xid) { this.xid = xid; }

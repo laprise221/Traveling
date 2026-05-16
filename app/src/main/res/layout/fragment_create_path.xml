@@ -1,132 +1,174 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    android:orientation="vertical"
+    android:background="@color/colorSurface">
+
+    <!-- ── Toolbar fixe ────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="?attr/colorPrimary">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@android:color/white"
+            android:contentDescription="Retour" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Créer un parcours"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_publish"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Publier"
+            android:textSize="14sp"
+            android:backgroundTint="@android:color/white"
+            android:textColor="?attr/colorPrimary"
+            app:cornerRadius="18dp" />
+
+    </LinearLayout>
+
+    <!-- ── Contenu défilable ───────────────────────────────── -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Toolbar -->
-        <LinearLayout
+        <!-- ── Photo de couverture (plein largeur, sans padding) ── -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_cover"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="8dp"
-            android:background="?attr/colorPrimary">
+            android:layout_height="200dp"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardCornerRadius="0dp"
+            app:cardElevation="0dp">
 
-            <ImageButton
-                android:id="@+id/btn_back"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="@android:color/white"
-                android:contentDescription="Retour" />
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="Créer un parcours"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@android:color/white" />
+                <LinearLayout
+                    android:id="@+id/cover_placeholder"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="#EEF0F4">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_publish"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="Publier"
-                android:textSize="14sp"
-                android:backgroundTint="@android:color/white"
-                android:textColor="?attr/colorPrimary"
-                app:cornerRadius="18dp" />
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@android:drawable/ic_menu_camera"
+                        app:tint="@color/colorPrimary"
+                        android:alpha="0.5"
+                        android:contentDescription="@null" />
 
-        </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="Ajouter une photo de couverture"
+                        android:textSize="14sp"
+                        android:textColor="@color/colorPrimary"
+                        android:alpha="0.7" />
 
-        <!-- Formulaire -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Galerie ou appareil photo"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextHint" />
+
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/img_cover"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="@null" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_change_cover"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="12dp"
+                    android:text="Changer"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@android:color/white"
+                    android:visibility="gone"
+                    app:cornerRadius="16dp"
+                    app:strokeColor="@android:color/white"
+                    app:backgroundTint="#66000000"
+                    app:icon="@android:drawable/ic_menu_camera"
+                    app:iconSize="14dp" />
+
+            </FrameLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ── Contenu principal ────────────────────────────── -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="32dp">
 
-            <!-- Photo de couverture -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/card_cover"
+            <!-- ─ Section : Informations ─ -->
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="180dp"
-                android:layout_marginBottom="16dp"
-                android:foreground="?attr/selectableItemBackground"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
-                app:strokeColor="@color/colorPrimaryLight"
-                app:strokeWidth="1dp">
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="14dp">
 
-                <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="20dp"
+                    android:background="@color/colorPrimary"
+                    android:layout_marginEnd="10dp" />
 
-                    <LinearLayout
-                        android:id="@+id/cover_placeholder"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:orientation="vertical"
-                        android:gravity="center"
-                        android:background="#F3F4F6">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Informations"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary" />
 
-                        <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:src="@android:drawable/ic_menu_camera"
-                            app:tint="@color/colorTextHint"
-                            android:contentDescription="@null" />
+            </LinearLayout>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="Ajouter une photo de couverture"
-                            android:textSize="14sp"
-                            android:textColor="@color/colorTextHint" />
-
-                    </LinearLayout>
-
-                    <ImageView
-                        android:id="@+id/img_cover"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="centerCrop"
-                        android:visibility="gone"
-                        android:contentDescription="@null" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_change_cover"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="bottom|end"
-                        android:layout_margin="8dp"
-                        android:text="Changer"
-                        android:textAllCaps="false"
-                        android:textSize="12sp"
-                        android:textColor="@android:color/white"
-                        android:visibility="gone"
-                        app:cornerRadius="16dp"
-                        app:strokeColor="@android:color/white"
-                        app:backgroundTint="#66000000" />
-
-                </FrameLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Titre -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -144,7 +186,6 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Ville (autocomplétion via Nominatim) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -164,12 +205,11 @@
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Description -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:hint="Description"
+                android:layout_marginBottom="4dp"
+                android:hint="Description (optionnel)"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -177,78 +217,131 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="3"
-                    android:maxLines="6"
+                    android:minLines="2"
+                    android:maxLines="5"
                     android:gravity="top" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Durée -->
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp" />
+
+            <!-- ─ Section : Préférences ─ -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Durée estimée"
-                android:textSize="14sp"
-                android:textColor="@android:color/darker_gray"
-                android:layout_marginBottom="8dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="20dp"
+                    android:background="@color/colorPrimary"
+                    android:layout_marginEnd="10dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Préférences"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary" />
+
+            </LinearLayout>
+
+            <!-- Durée -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Durée estimée"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextSecondary" />
+
+                <TextView
+                    android:id="@+id/tv_duree_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="3 h"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorPrimary" />
+
+            </LinearLayout>
 
             <com.google.android.material.slider.Slider
                 android:id="@+id/slider_duree"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:valueFrom="0"
+                android:layout_marginBottom="12dp"
+                android:valueFrom="1"
                 android:valueTo="12"
                 android:stepSize="1"
                 android:value="3"
-                app:trackColorActive="#6366F1"
-                app:thumbColor="#6366F1" />
+                app:trackColorActive="@color/colorPrimary"
+                app:thumbColor="@color/colorPrimary"
+                app:haloColor="@color/colorPrimaryLight" />
 
-            <TextView
-                android:id="@+id/tv_duree_value"
+            <!-- Budget -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="3h"
-                android:textAlignment="center"
-                android:textSize="16sp"
-                android:textColor="#6366F1"
-                android:textStyle="bold"
-                android:paddingBottom="4dp"/>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Budget maximum"
-                android:textSize="14sp"
-                android:paddingBottom="0dp" />
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Budget maximum"
+                    android:textSize="13sp"
+                    android:textColor="@color/colorTextSecondary" />
+
+                <TextView
+                    android:id="@+id/tv_budget_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="80 €"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorPrimary" />
+
+            </LinearLayout>
 
             <com.google.android.material.slider.Slider
                 android:id="@+id/slider_budget"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
                 android:valueFrom="0"
                 android:valueTo="300"
                 android:stepSize="10"
                 android:value="80"
-                app:trackColorActive="#6366F1"
-                app:thumbColor="#6366F1" />
+                app:trackColorActive="@color/colorPrimary"
+                app:thumbColor="@color/colorPrimary"
+                app:haloColor="@color/colorPrimaryLight" />
 
-            <TextView
-                android:id="@+id/tv_budget_value"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="80 €"
-                android:textAlignment="center"
-                android:textSize="16sp"
-                android:textColor="#6366F1"
-                android:textStyle="bold"
-                android:paddingBottom="4dp"/>
-            <!-- Type d'activité-->
+            <!-- Activités -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Quels types d'activités vous intéressent"
-                android:textSize="14sp"
-                android:textColor="@android:color/darker_gray"
+                android:text="Types d'activités"
+                android:textSize="13sp"
+                android:textColor="@color/colorTextSecondary"
                 android:layout_marginBottom="8dp" />
 
             <com.google.android.material.chip.ChipGroup
@@ -264,35 +357,35 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Culture"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_restauration"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Restauration"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_loisirs"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Loisirs"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_nature"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Nature"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_decouverte"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Découverte"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
             </com.google.android.material.chip.ChipGroup>
 
@@ -301,8 +394,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Difficulté"
-                android:textSize="14sp"
-                android:textColor="@android:color/darker_gray"
+                android:textSize="13sp"
+                android:textColor="@color/colorTextSecondary"
                 android:layout_marginBottom="8dp" />
 
             <com.google.android.material.chip.ChipGroup
@@ -318,73 +411,145 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Facile"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_moderate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Modéré"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_hard"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Difficile"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
             </com.google.android.material.chip.ChipGroup>
 
-            <!-- Sensibilités météo -->
+            <!-- Sensibilités météo (chips) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Sensibilités météo"
-                android:textSize="14sp"
-                android:textColor="@android:color/darker_gray"
+                android:textSize="13sp"
+                android:textColor="@color/colorTextSecondary"
                 android:layout_marginBottom="8dp" />
 
-            <CheckBox
-                android:id="@+id/cb_chaleur"
-                android:layout_width="wrap_content"
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chip_group_meteo"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Sensible à la chaleur" />
+                android:layout_marginBottom="4dp"
+                app:singleSelection="false"
+                app:selectionRequired="false">
 
-            <CheckBox
-                android:id="@+id/cb_pluie"
-                android:layout_width="wrap_content"
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_chaleur"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Sensible à la chaleur"
+                    style="@style/ChipFilter.Traveling" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_pluie"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Sensible à la pluie"
+                    style="@style/ChipFilter.Traveling" />
+
+            </com.google.android.material.chip.ChipGroup>
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp" />
+
+            <!-- ─ Section : Génération automatique ─ -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Sensible à la pluie"
-                android:layout_marginBottom="16dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="20dp"
+                    android:background="@color/colorPrimary"
+                    android:layout_marginEnd="10dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Génération automatique"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Générez un parcours optimisé selon vos préférences, la météo et les points d'intérêt locaux."
+                android:textSize="13sp"
+                android:textColor="@color/colorTextSecondary"
+                android:lineSpacingMultiplier="1.4"
+                android:layout_marginBottom="14dp" />
 
             <!-- Météo et résumé (affichés après génération) -->
-            <TextView
-                android:id="@+id/tv_meteo"
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_meteo_resume"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="16sp"
-                android:textStyle="bold"
+                android:layout_marginBottom="12dp"
                 android:visibility="gone"
-                android:layout_marginBottom="4dp" />
+                app:cardCornerRadius="10dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="#F0F4FF"
+                app:strokeColor="@color/colorPrimaryLight"
+                app:strokeWidth="1dp">
 
-            <TextView
-                android:id="@+id/tv_resume"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="14sp"
-                android:textColor="@android:color/darker_gray"
-                android:visibility="gone"
-                android:layout_marginBottom="16dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
 
-            <!-- 3 options de parcours -->
+                    <TextView
+                        android:id="@+id/tv_meteo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary" />
+
+                    <TextView
+                        android:id="@+id/tv_resume"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textSize="13sp"
+                        android:textColor="@color/colorTextSecondary" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:id="@+id/tv_options_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Choisissez un parcours"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
+                android:textColor="@color/colorTextPrimary"
                 android:visibility="gone"
                 android:layout_marginBottom="8dp" />
 
@@ -393,15 +558,41 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:layout_marginBottom="16dp" />
+                android:layout_marginBottom="14dp" />
 
-            <!-- Étapes -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_generate"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="Générer un parcours"
+                android:textSize="15sp"
+                android:textAllCaps="false"
+                app:icon="@android:drawable/ic_menu_compass"
+                app:iconGravity="textStart"
+                app:iconSize="18dp"
+                app:cornerRadius="14dp" />
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp" />
+
+            <!-- ─ Section : Étapes ─ -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
+                android:layout_marginBottom="12dp">
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="20dp"
+                    android:background="@color/colorPrimary"
+                    android:layout_marginEnd="10dp" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -409,7 +600,8 @@
                     android:layout_weight="1"
                     android:text="Étapes du parcours"
                     android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:textColor="@color/colorTextPrimary" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_add_step"
@@ -417,32 +609,67 @@
                     android:layout_height="wrap_content"
                     android:text="+ Ajouter"
                     android:textSize="13sp"
+                    android:textAllCaps="false"
                     style="@style/Widget.MaterialComponents.Button.TextButton" />
 
             </LinearLayout>
 
-            <!-- Container des étapes -->
             <LinearLayout
                 android:id="@+id/steps_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:layout_marginBottom="16dp" />
+                android:layout_marginBottom="4dp" />
 
-            <!-- Visibilité -->
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/colorDivider"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="20dp" />
+
+            <!-- ─ Section : Paramètres ─ -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="24dp">
+                android:background="@drawable/bg_metric_row"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="10dp"
+                android:layout_marginBottom="8dp">
 
-                <TextView
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@android:drawable/ic_menu_share"
+                    app:tint="@color/colorPrimary"
+                    android:contentDescription="@null"
+                    android:layout_marginEnd="10dp" />
+
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Publication publique"
-                    android:textSize="15sp" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Parcours public"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/colorTextPrimary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Visible par tous les utilisateurs"
+                        android:textSize="12sp"
+                        android:textColor="@color/colorTextSecondary" />
+
+                </LinearLayout>
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_public"
@@ -452,20 +679,23 @@
 
             </LinearLayout>
 
-            <!-- Bouton Générer parcours -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_generate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Générer parcours"
-                android:textSize="16sp"
-                android:padding="12dp"
-                app:icon="@android:drawable/ic_menu_compass"
-                app:iconGravity="textStart"
-                app:cornerRadius="12dp"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            <!-- Hidden CheckBoxes kept for Java compatibility -->
+            <CheckBox
+                android:id="@+id/cb_chaleur"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <CheckBox
+                android:id="@+id/cb_pluie"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
         </LinearLayout>
 
     </LinearLayout>
-</ScrollView>
+
+    </ScrollView>
+
+</LinearLayout>

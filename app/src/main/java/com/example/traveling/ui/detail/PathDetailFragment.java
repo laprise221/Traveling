@@ -67,7 +67,7 @@ public class PathDetailFragment extends Fragment {
     private static final String ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ4YWFkZjhlMWY3ZDQ2NjU4YmYxYzM1OTllM2RiN2QwIiwiaCI6Im11cm11cjY0In0=";
 
     private MapView mapView;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Nullable
@@ -163,8 +163,24 @@ public class PathDetailFragment extends Fragment {
             tvDesc.setVisibility(View.VISIBLE);
         }
 
+        // Priority: imageUrl (API-fetched, saved as URL) > imageBase64 (manually picked)
+        String imageUrl = step.getImageUrl();
         String b64 = step.getImageBase64();
-        if (b64 != null && !b64.isEmpty()) {
+
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            ImageView imgView = stepView.findViewById(R.id.img_step_photo);
+            View cardPhoto = stepView.findViewById(R.id.card_step_photo);
+            View tvNum = stepView.findViewById(R.id.tv_step_number);
+            executor.execute(() -> {
+                Bitmap bmp = downloadBitmap(imageUrl);
+                mainHandler.post(() -> {
+                    if (!isAdded() || bmp == null) return;
+                    imgView.setImageBitmap(bmp);
+                    cardPhoto.setVisibility(View.VISIBLE);
+                    tvNum.setVisibility(View.GONE);
+                });
+            });
+        } else if (b64 != null && !b64.isEmpty()) {
             Bitmap bmp = ImageUtils.base64ToBitmap(b64);
             if (bmp != null) {
                 ((ImageView) stepView.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
@@ -174,6 +190,23 @@ public class PathDetailFragment extends Fragment {
         }
 
         container.addView(stepView);
+    }
+
+    private Bitmap downloadBitmap(String urlStr) {
+        try {
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() != 200) return null;
+            java.io.InputStream is = conn.getInputStream();
+            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+            is.close();
+            return bmp;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private TextView makeTextView(String text) {
