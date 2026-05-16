@@ -36,7 +36,11 @@ public class NotificationRepository {
                                   String senderId, String senderName,
                                   String contentId, String contentType,
                                   String contentTitle, String message) {
-        if (recipientUid == null || recipientUid.equals(senderId)) return;
+        Log.d(TAG, "sendNotification type=" + type + " recipient=" + recipientUid + " sender=" + senderId);
+        if (recipientUid == null || recipientUid.equals(senderId)) {
+            Log.d(TAG, "sendNotification SKIPPED (null or same user)");
+            return;
+        }
 
         Map<String, Object> data = new HashMap<>();
         data.put("type", type);

@@ -724,6 +724,17 @@ public class SharePhotoFragment extends Fragment {
                         for (String groupId : selectedGroupIds) {
                             GroupRepository.get().addGroupPost(groupId, photoId, null, null);
                         }
+                        // Notify users following the photo's tag (only for immediate publications)
+                        android.util.Log.d("SharePhoto", "locationType=" + photo.getLocationType() + " scheduledDate=" + scheduledDate);
+                        if (scheduledDate == null && photo.getLocationType() != null && !photo.getLocationType().isEmpty()) {
+                            FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                            String publisherName = me != null && me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                            String publisherId = me != null ? me.getUid() : "";
+                            android.util.Log.d("SharePhoto", "Calling notifyTagFollowers tag=" + photo.getLocationType());
+                            FirestoreRepository.get().notifyTagFollowers(
+                                    photo.getLocationType(), publisherId, publisherName,
+                                    photoId, "photo", photo.getTitle());
+                        }
                         String msg;
                         if (scheduledDate != null) {
                             SchedulePublishHelper.schedule(requireContext(), photoId,

@@ -56,6 +56,87 @@ public class FirestoreRepository {
                 .addOnFailureListener(e -> Log.e(TAG, "Error saving user", e));
     }
 
+    /** Save followed tags for a user.
+     *  Met à jour le document utilisateur ET la collection tagSubscriptions/{tag}/followers/{uid}. */
+    public void saveFollowedTags(String uid, List<String> newTags, OnSuccessCallback<Void> callback) {
+        List<String> normalized = new ArrayList<>();
+        for (String t : newTags) normalized.add(t.toLowerCase());
+        Log.d(TAG, "saveFollowedTags uid=" + uid + " tags=" + normalized);
+
+        loadFollowedTags(uid, existingTags -> {
+            Map<String, Object> data = new HashMap<>();
+            data.put("followedTags", normalized);
+            db.collection("users").document(uid).set(data, SetOptions.merge())
+                    .addOnSuccessListener(v -> { if (callback != null) callback.onSuccess(null); })
+                    .addOnFailureListener(e -> Log.e(TAG, "Error saving followedTags on user doc", e));
+
+            for (String old : existingTags) {
+                if (!normalized.contains(old.toLowerCase())) {
+                    Log.d(TAG, "Removing tagSubscription: " + old + " for uid=" + uid);
+                    db.collection("tagSubscriptions").document(old.toLowerCase())
+                            .collection("followers").document(uid).delete();
+                }
+            }
+
+            for (String tag : normalized) {
+                Log.d(TAG, "Writing tagSubscription: " + tag + " for uid=" + uid);
+                Map<String, Object> sub = new HashMap<>();
+                sub.put("uid", uid);
+                sub.put("followedAt", FieldValue.serverTimestamp());
+                db.collection("tagSubscriptions").document(tag)
+                        .collection("followers").document(uid)
+                        .set(sub)
+                        .addOnSuccessListener(v -> Log.d(TAG, "tagSubscription written: " + tag))
+                        .addOnFailureListener(e -> Log.e(TAG, "FAILED writing tagSubscription: " + tag, e));
+            }
+        });
+    }
+
+    /** Charge les tags suivis par un utilisateur depuis son document. */
+    public void loadFollowedTags(String uid, OnSuccessCallback<List<String>> callback) {
+        db.collection("users").document(uid).get()
+                .addOnSuccessListener(doc -> {
+                    List<String> tags = new ArrayList<>();
+                    if (doc.exists()) {
+                        List<?> raw = (List<?>) doc.get("followedTags");
+                        if (raw != null) {
+                            for (Object t : raw) {
+                                if (t instanceof String) tags.add(((String) t).toLowerCase());
+                            }
+                        }
+                    }
+                    Log.d(TAG, "loadFollowedTags uid=" + uid + " result=" + tags);
+                    callback.onSuccess(tags);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "loadFollowedTags FAILED for uid=" + uid, e);
+                    callback.onSuccess(new ArrayList<>());
+                });
+    }
+
+    /** Notifie tous les abonnés d'un tag via tagSubscriptions/{tag}/followers. */
+    public void notifyTagFollowers(String tag, String publisherId, String publisherName,
+                                    String contentId, String contentType, String contentTitle) {
+        if (tag == null || tag.isEmpty()) return;
+        String normalizedTag = tag.toLowerCase();
+        Log.d(TAG, "notifyTagFollowers tag=" + normalizedTag + " publisherId=" + publisherId);
+        db.collection("tagSubscriptions").document(normalizedTag)
+                .collection("followers").get()
+                .addOnSuccessListener(snapshots -> {
+                    Log.d(TAG, "notifyTagFollowers found " + snapshots.size() + " follower(s) for tag=" + normalizedTag);
+                    for (DocumentSnapshot doc : snapshots) {
+                        String recipientUid = doc.getId();
+                        Log.d(TAG, "Notifying uid=" + recipientUid + " for tag=" + normalizedTag);
+                        if (!recipientUid.equals(publisherId)) {
+                            NotificationRepository.get().sendNotification(
+                                    recipientUid, "tag_follow", publisherId, publisherName,
+                                    contentId, contentType, contentTitle, normalizedTag);
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> Log.e(TAG, "notifyTagFollowers FAILED for tag=" + normalizedTag, e));
+    }
+
     // ===================== PHOTOS =====================
 
     /** Save a new photo to Firestore */

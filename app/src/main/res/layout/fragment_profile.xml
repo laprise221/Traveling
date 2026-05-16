@@ -276,6 +276,23 @@
                         android:textStyle="bold" />
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_edit_profile"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Modifier mon profil"
+                        android:textColor="@color/colorTextPrimary"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        app:icon="@android:drawable/ic_menu_edit"
+                        app:iconTint="@color/colorPrimary"
+                        app:iconGravity="start" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:background="@color/colorDivider" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_notifications"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
