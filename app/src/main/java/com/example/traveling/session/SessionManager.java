@@ -17,15 +17,15 @@ public final class SessionManager {
         return INSTANCE;
     }
 
-    /** True si aucune session Firebase n'existe (même pas anonyme). */
-    public boolean isAnonymous() {
-        return FirebaseAuth.getInstance().getCurrentUser() == null;
-    }
-
     /** True si l'utilisateur n'a pas de vrai compte (pas connecté ou session Firebase anonyme). */
-    public boolean isGuest() {
+    public boolean isAnonymous() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         return user == null || user.isAnonymous();
+    }
+
+    /** Alias de isAnonymous() pour la lisibilité. */
+    public boolean isGuest() {
+        return isAnonymous();
     }
 
     /** Garantit qu'une session Firebase existe. Se connecte anonymement si besoin, puis appelle onReady. */
