@@ -57,6 +57,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -79,10 +81,12 @@ public class CreatePathFragment extends Fragment {
     private TextView tvDureeValue;
     private ChipGroup chipGroupDifficulty;
     private ChipGroup chipGroupActivities;
+    private ChipGroup chipGroupMeteo;
     private CheckBox cbChaleur;
     private CheckBox cbPluie;
     private TextView tvMeteo;
     private TextView tvResume;
+    private View cardMeteoResume;
     private TextView tvOptionsTitle;
     private LinearLayout optionsContainer;
     private LinearLayout stepsContainer;
@@ -129,9 +133,17 @@ public class CreatePathFragment extends Fragment {
         chipGroupActivities = view.findViewById(R.id.chip_group_activities);
         cbChaleur = view.findViewById(R.id.cb_chaleur);
         cbPluie = view.findViewById(R.id.cb_pluie);
+        chipGroupMeteo = view.findViewById(R.id.chip_group_meteo);
         tvMeteo = view.findViewById(R.id.tv_meteo);
         tvResume = view.findViewById(R.id.tv_resume);
+        cardMeteoResume = view.findViewById(R.id.card_meteo_resume);
         tvOptionsTitle = view.findViewById(R.id.tv_options_title);
+
+        // Synchroniser les chips météo avec les checkboxes (utilisés dans generatePath)
+        ((Chip) view.findViewById(R.id.chip_chaleur))
+                .setOnCheckedChangeListener((btn, checked) -> cbChaleur.setChecked(checked));
+        ((Chip) view.findViewById(R.id.chip_pluie))
+                .setOnCheckedChangeListener((btn, checked) -> cbPluie.setChecked(checked));
         optionsContainer = view.findViewById(R.id.options_container);
         stepsContainer = view.findViewById(R.id.steps_container);
         switchPublic = view.findViewById(R.id.switch_public);
@@ -429,7 +441,7 @@ public class CreatePathFragment extends Fragment {
                 // ---- ÉTAPE 4 : Filtrer selon météo et budget ----
                 List<JSONObject> filteredPOIs = filterPOIs(
                         poiResults, temperature, weatherCode,
-                        sensibleChaleur, sensiblePluie, budget
+                        sensibleChaleur, sensiblePluie, budget, maxSteps
                 );
 
                 // ---- ÉTAPE 5 : Générer 3 options (économique, équilibré, confort) ----
@@ -438,15 +450,17 @@ public class CreatePathFragment extends Fragment {
 
                 double maxRouteKm = maxWalkKm(effort, dureeMax);
                 List<PathOption> generatedOptions = new ArrayList<>();
+                // costPerStep = frais annexes par étape (boisson, transport local)
+                // le coût d'entrée réel est estimé par estimatePOICost() selon la catégorie
                 generatedOptions.add(buildOption(
                         "Économique", filteredPOIs,
-                        Math.max(2, maxSteps - 1), true, false, 8, maxRouteKm));
+                        Math.max(2, maxSteps - 1), true, false, 3, maxRouteKm));
                 generatedOptions.add(buildOption(
                         "Équilibré", filteredPOIs,
-                        maxSteps, false, false, 15, maxRouteKm));
+                        maxSteps, false, false, 5, maxRouteKm));
                 generatedOptions.add(buildOption(
                         "Confort", filteredPOIs,
-                        maxSteps + 1, false, true, 25, maxRouteKm));
+                        maxSteps + 1, false, true, 10, maxRouteKm));
 
                 // ---- ÉTAPE 6 : Construire le résumé ----
                 String meteoInfo;
@@ -473,10 +487,8 @@ public class CreatePathFragment extends Fragment {
                     }
 
                     tvMeteo.setText("Météo : " + finalMeteoInfo);
-                    tvMeteo.setVisibility(View.VISIBLE);
-
                     tvResume.setText("Critères : ~" + dureeMax + "h · " + budget + "€ max · " + effort);
-                    tvResume.setVisibility(View.VISIBLE);
+                    cardMeteoResume.setVisibility(View.VISIBLE);
 
                     displayOptions(nonEmpty, dureeMax);
 
@@ -783,7 +795,7 @@ public class CreatePathFragment extends Fragment {
     private List<JSONObject> filterPOIs(JSONArray poiResults,
                                         double temperature, int weatherCode,
                                         boolean sensibleChaleur, boolean sensiblePluie,
-                                        int budget) throws JSONException {
+                                        int budget, int maxSteps) throws JSONException {
 
         boolean ilPleut = weatherCode >= 51 && weatherCode <= 67;
         boolean ilFaitChaud = temperature > 30;
@@ -820,8 +832,9 @@ public class CreatePathFragment extends Fragment {
                 if (estExterieur) continue;
             }
 
-            int rate = poi.optInt("rate", 0);
-            if (budget < 50 && rate >= 3) continue;
+            // Exclure les lieux dont le coût d'entrée dépasse le budget par étape
+            int perStepBudget = budget / Math.max(2, maxSteps);
+            if (estimatePOICost(poi) > perStepBudget) continue;
 
             filtered.add(poi);
         }
@@ -922,14 +935,16 @@ public class CreatePathFragment extends Fragment {
 
     private PathOption buildOption(String name, List<JSONObject> pool, int maxSteps,
                                    boolean excludeExpensive, boolean preferClose,
-                                   int costPerStep, double maxRouteKm) throws JSONException {
+                                   int overheadPerStep, double maxRouteKm) throws JSONException {
         List<JSONObject> pois = new ArrayList<>();
         for (JSONObject poi : pool) {
-            if (excludeExpensive && poi.optInt("rate", 0) >= 3) continue;
+            // Pour "Économique", exclure les lieux payants (musées, restos)
+            if (excludeExpensive && estimatePOICost(poi) >= 10) continue;
             pois.add(poi);
         }
 
         List<PathStep> picked = new ArrayList<>();
+        java.util.Map<PathStep, Integer> admissionCosts = new java.util.IdentityHashMap<>();
 
         for (int idx = 0; idx < pois.size(); idx++) {
             JSONObject first = pois.get(idx);
@@ -939,6 +954,7 @@ public class CreatePathFragment extends Fragment {
             PathStep firstStep = new PathStep(first.getString("name"), "",
                     fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null);
             firstStep.setXid(first.optString("xid", ""));
+            admissionCosts.put(firstStep, estimatePOICost(first));
             picked.add(firstStep);
             pois.remove(idx);
             break;
@@ -950,6 +966,7 @@ public class CreatePathFragment extends Fragment {
             double bestLat = 0, bestLon = 0;
             String bestName = "";
             String bestXid = "";
+            int bestCost = 0;
 
             for (int i = 0; i < pois.size(); i++) {
                 JSONObject poi = pois.get(i);
@@ -980,12 +997,14 @@ public class CreatePathFragment extends Fragment {
                     bestLon = pLon;
                     bestName = pName;
                     bestXid = poi.optString("xid", "");
+                    bestCost = estimatePOICost(poi);
                 }
             }
 
             if (bestIdx == -1) break;
             PathStep bestStep = new PathStep(bestName, "", bestLat, bestLon, null, null);
             bestStep.setXid(bestXid);
+            admissionCosts.put(bestStep, bestCost);
             picked.add(bestStep);
             pois.remove(bestIdx);
         }
@@ -1002,7 +1021,7 @@ public class CreatePathFragment extends Fragment {
                         picked.get(i).getLatitude(), picked.get(i).getLongitude());
             }
             if (total <= maxRouteKm) break;
-            picked.remove(picked.size() - 1); // retire la dernière étape
+            picked.remove(picked.size() - 1);
         }
 
         double totalKm = 0;
@@ -1012,8 +1031,23 @@ public class CreatePathFragment extends Fragment {
                     picked.get(i).getLatitude(), picked.get(i).getLongitude());
         }
 
-        int estBudget = picked.size() * costPerStep;
+        // Budget = coût d'entrée réel par lieu + frais annexes (boissons, transport local)
+        int estBudget = 0;
+        for (PathStep s : picked) {
+            estBudget += admissionCosts.getOrDefault(s, 0) + overheadPerStep;
+        }
         return new PathOption(name, picked, totalKm, estBudget);
+    }
+
+    private int estimatePOICost(JSONObject poi) {
+        String kinds = poi.optString("kinds", "");
+        if (kinds.contains("restaurants") || kinds.contains("foods")) return 18;
+        if (kinds.contains("cafes")) return 5;
+        if (kinds.contains("museums")) return 12;
+        if (kinds.contains("theatres_and_entertainments") || kinds.contains("cinemas")) return 10;
+        if (kinds.contains("amusements")) return 8;
+        // monuments, historic, architecture, natural, parks, view_points → gratuits
+        return 0;
     }
 
     /**
@@ -1255,8 +1289,14 @@ public class CreatePathFragment extends Fragment {
                     Log.d("CreatePath", "Enriched " + step.getName()
                             + " → desc=" + !desc.isEmpty() + " img=" + (imageUrl != null));
 
+                    // 3. Prix réel depuis Overpass (tags OSM fee/charge)
+                    String priceInfo = fetchPriceFromOverpass(
+                            step.getLatitude(), step.getLongitude());
+
                     Bitmap bmp = (imageUrl != null) ? downloadBitmap(imageUrl) : null;
-                    String finalDesc = desc;
+                    String finalDesc = priceInfo != null
+                            ? (priceInfo + (desc.isEmpty() ? "" : "\n" + desc))
+                            : desc;
                     String b64 = bmp != null ? ImageUtils.bitmapToBase64(bmp) : null;
 
                     mainHandler.post(() -> {
@@ -1289,6 +1329,57 @@ public class CreatePathFragment extends Fragment {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String fetchPriceFromOverpass(double lat, double lon) {
+        if (lat == 0 && lon == 0) return null;
+        try {
+            String query = "[out:json][timeout:8];"
+                    + "(node(around:150," + lat + "," + lon + ")[\"fee\"];"
+                    + "way(around:150," + lat + "," + lon + ")[\"fee\"];);"
+                    + "out tags;";
+            URL url = new URL("https://overpass-api.de/api/interpreter?data="
+                    + URLEncoder.encode(query, "UTF-8"));
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() != 200) return null;
+
+            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = r.readLine()) != null) sb.append(l);
+            r.close();
+
+            JSONArray elements = new JSONObject(sb.toString()).optJSONArray("elements");
+            if (elements == null) return null;
+
+            for (int i = 0; i < elements.length(); i++) {
+                JSONObject tags = elements.getJSONObject(i).optJSONObject("tags");
+                if (tags == null) continue;
+                String fee = tags.optString("fee", "");
+                if (fee.isEmpty()) continue;
+                if ("no".equals(fee)) return "Entrée gratuite";
+                String charge = tags.optString("charge", "");
+                if (!charge.isEmpty()) return "Entrée : " + simplifyCharge(charge);
+                return "Entrée payante";
+            }
+        } catch (Exception e) {
+            Log.d("CreatePath", "Overpass price fetch failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private String simplifyCharge(String charge) {
+        // Normaliser la devise
+        String c = charge.replaceAll("(?i)euros?", "€").replaceAll("(?i)eur\\b", "€").trim();
+        // Extraire le premier montant (ex: "adult: 15 €; child: 7 €" → "15 €")
+        Matcher m = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*€").matcher(c);
+        if (m.find()) return m.group(1).replace(",", ".") + " €";
+        m = Pattern.compile("€\\s*(\\d+(?:[.,]\\d+)?)").matcher(c);
+        if (m.find()) return m.group(1).replace(",", ".") + " €";
+        return c.length() > 40 ? c.substring(0, 37) + "…" : c;
     }
 
     private void updateStepViewDetails(View stepView, PathStep step) {
