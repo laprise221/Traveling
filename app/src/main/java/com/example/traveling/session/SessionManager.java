@@ -1,9 +1,13 @@
 package com.example.traveling.session;
 
+import android.util.Log;
+
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 public final class SessionManager {
+
+    private static final String TAG = "SessionManager";
 
     private static final SessionManager INSTANCE = new SessionManager();
 
@@ -31,7 +35,13 @@ public final class SessionManager {
             return;
         }
         FirebaseAuth.getInstance().signInAnonymously()
-                .addOnSuccessListener(result -> onReady.run())
-                .addOnFailureListener(e -> onReady.run());
+                .addOnSuccessListener(result -> {
+                    Log.d(TAG, "signInAnonymously SUCCESS uid=" + result.getUser().getUid());
+                    onReady.run();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "signInAnonymously FAILED: " + e.getMessage(), e);
+                    onReady.run();
+                });
     }
 }

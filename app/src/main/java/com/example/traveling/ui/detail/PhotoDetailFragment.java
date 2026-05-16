@@ -146,9 +146,10 @@ public class PhotoDetailFragment extends Fragment {
                 if (photo.getId() != null) {
                     FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
                     FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
-                    if (newLiked && me != null && !me.isAnonymous() && photo.getAuthorId() != null
+                    if (newLiked && me != null && photo.getAuthorId() != null
                             && !me.getUid().equals(photo.getAuthorId())) {
-                        String n = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                        String n = me.isAnonymous() ? "Anonyme"
+                                : (me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un");
                         NotificationRepository.get().sendNotification(
                                 photo.getAuthorId(), "like", me.getUid(), n,
                                 photo.getId(), "photo", photo.getTitle(), null);
