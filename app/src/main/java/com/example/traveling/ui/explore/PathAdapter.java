@@ -10,7 +10,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.graphics.Bitmap;
+
 import com.example.traveling.R;
+import com.example.traveling.data.ImageUtils;
 import com.example.traveling.model.TravelPath;
 import com.google.android.material.chip.Chip;
 
@@ -100,8 +103,16 @@ public class PathAdapter extends RecyclerView.Adapter<PathAdapter.PathViewHolder
         }
 
         void bind(TravelPath path, int position) {
-            if (path.getImageResId() != 0) pathImage.setImageResource(path.getImageResId());
-            else pathImage.setImageResource(R.drawable.sample_path_1);
+            String b64 = path.getImageBase64();
+            if (b64 != null && !b64.isEmpty()) {
+                Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+                if (bmp != null) pathImage.setImageBitmap(bmp);
+                else pathImage.setImageResource(R.drawable.sample_path_1);
+            } else if (path.getImageResId() != 0) {
+                pathImage.setImageResource(path.getImageResId());
+            } else {
+                pathImage.setImageResource(R.drawable.sample_path_1);
+            }
             pathTitle.setText(path.getTitle());
             pathCity.setText(path.getCity());
             pathDescription.setText(path.getDescription());

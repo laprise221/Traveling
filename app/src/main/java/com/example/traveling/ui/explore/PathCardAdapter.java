@@ -10,7 +10,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.graphics.Bitmap;
+
 import com.example.traveling.R;
+import com.example.traveling.data.ImageUtils;
 import com.example.traveling.model.TravelPath;
 
 import java.util.ArrayList;
@@ -47,8 +50,16 @@ public class PathCardAdapter extends RecyclerView.Adapter<PathCardAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH h, int position) {
         TravelPath p = paths.get(position);
-        if (p.getImageResId() != 0) h.image.setImageResource(p.getImageResId());
-        else h.image.setImageResource(R.drawable.sample_path_1); // fallback
+        String b64 = p.getImageBase64();
+        if (b64 != null && !b64.isEmpty()) {
+            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+            if (bmp != null) h.image.setImageBitmap(bmp);
+            else h.image.setImageResource(R.drawable.sample_path_1);
+        } else if (p.getImageResId() != 0) {
+            h.image.setImageResource(p.getImageResId());
+        } else {
+            h.image.setImageResource(R.drawable.sample_path_1);
+        }
         h.title.setText(p.getTitle());
         h.likes.setText(p.getLikeCount() + " \uD83D\uDC4D");
         h.like.setImageResource(p.isLiked()
