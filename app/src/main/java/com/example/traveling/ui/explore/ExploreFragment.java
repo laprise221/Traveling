@@ -361,26 +361,25 @@ public class ExploreFragment extends Fragment
 
     @Override
     public void onLikeClick(Photo photo, int position) {
-        if (SessionManager.get().isAnonymous()) {
-            Toast.makeText(requireContext(), "Connectez-vous pour liker", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        boolean newLiked = !photo.isLiked();
-        photo.setLiked(newLiked);
-        photoAdapter1.notifyItemChanged(position);
-        photoAdapter2.notifyItemChanged(position);
-        if (photo.getId() != null) {
-            FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
-            if (newLiked && photo.getAuthorId() != null) {
+        SessionManager.get().ensureFirebaseSession(() -> {
+            if (!isAdded()) return;
+            boolean newLiked = !photo.isLiked();
+            photo.setLiked(newLiked);
+            photoAdapter1.notifyItemChanged(position);
+            photoAdapter2.notifyItemChanged(position);
+            if (photo.getId() != null) {
+                FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
                 FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
-                if (me != null && !me.getUid().equals(photo.getAuthorId())) {
-                    String name = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                if (newLiked && me != null && photo.getAuthorId() != null
+                        && !me.getUid().equals(photo.getAuthorId())) {
+                    String name = me.isAnonymous() ? "Anonyme"
+                            : (me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un");
                     NotificationRepository.get().sendNotification(
                             photo.getAuthorId(), "like", me.getUid(), name,
                             photo.getId(), "photo", photo.getTitle(), null);
                 }
             }
-        }
+        });
     }
 
     @Override
