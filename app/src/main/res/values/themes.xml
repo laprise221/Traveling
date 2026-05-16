@@ -13,4 +13,14 @@
     </style>
 
     <style name="Theme.Traveling" parent="Base.Theme.Traveling" />
+
+    <style name="ChipFilter.Traveling" parent="Widget.MaterialComponents.Chip.Filter">
+        <item name="chipBackgroundColor">@color/chip_background_states</item>
+        <item name="chipStrokeColor">@color/chip_stroke_states</item>
+        <item name="chipStrokeWidth">1.5dp</item>
+        <item name="android:textColor">@color/chip_text_states</item>
+        <item name="chipCornerRadius">20dp</item>
+        <item name="chipMinHeight">36dp</item>
+        <item name="checkedIconTint">@android:color/white</item>
+    </style>
 </resources>

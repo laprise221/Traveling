@@ -357,35 +357,35 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Culture"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_restauration"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Restauration"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_loisirs"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Loisirs"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_nature"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Nature"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_decouverte"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Découverte"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
             </com.google.android.material.chip.ChipGroup>
 
@@ -411,21 +411,21 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Facile"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_moderate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Modéré"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_hard"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Difficile"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
             </com.google.android.material.chip.ChipGroup>
 
@@ -451,14 +451,14 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Sensible à la chaleur"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip_pluie"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Sensible à la pluie"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    style="@style/ChipFilter.Traveling" />
 
             </com.google.android.material.chip.ChipGroup>
 

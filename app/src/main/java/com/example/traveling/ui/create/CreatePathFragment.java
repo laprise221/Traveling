@@ -1370,14 +1370,31 @@ public class CreatePathFragment extends Fragment {
                     String finalDesc = priceInfo != null
                             ? (priceInfo + (desc.isEmpty() ? "" : "\n" + desc))
                             : desc;
-                    String b64 = bmp != null ? ImageUtils.bitmapToBase64(bmp) : null;
+                    String finalImageUrl = imageUrl;
 
                     mainHandler.post(() -> {
                         if (!isAdded()) return;
                         if (!finalDesc.isEmpty()) step.setDescription(finalDesc);
-                        if (b64 != null) step.setImageBase64(b64);
-                        if (stepIndex < stepsContainer.getChildCount()) {
-                            updateStepViewDetails(stepsContainer.getChildAt(stepIndex), step);
+                        // Store URL (not base64) to keep Firestore document small
+                        if (finalImageUrl != null) step.setImageUrl(finalImageUrl);
+                        View stepView = stepIndex < stepsContainer.getChildCount()
+                                ? stepsContainer.getChildAt(stepIndex) : null;
+                        if (stepView != null) {
+                            // Show description
+                            if (!finalDesc.isEmpty()) {
+                                TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
+                                tvDesc.setText(finalDesc);
+                                tvDesc.setVisibility(View.VISIBLE);
+                            }
+                            // Show downloaded bitmap directly in creation view
+                            if (bmp != null) {
+                                ((ImageView) stepView.findViewById(R.id.img_step_photo))
+                                        .setImageBitmap(bmp);
+                                stepView.findViewById(R.id.card_step_photo)
+                                        .setVisibility(View.VISIBLE);
+                                stepView.findViewById(R.id.tv_step_number)
+                                        .setVisibility(View.GONE);
+                            }
                         }
                     });
                 } catch (Exception e) {
@@ -1453,24 +1470,6 @@ public class CreatePathFragment extends Fragment {
         m = Pattern.compile("€\\s*(\\d+(?:[.,]\\d+)?)").matcher(c);
         if (m.find()) return m.group(1).replace(",", ".") + " €";
         return c.length() > 40 ? c.substring(0, 37) + "…" : c;
-    }
-
-    private void updateStepViewDetails(View stepView, PathStep step) {
-        String desc = step.getDescription();
-        if (desc != null && !desc.isEmpty()) {
-            TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
-            tvDesc.setText(desc);
-            tvDesc.setVisibility(View.VISIBLE);
-        }
-        String b64 = step.getImageBase64();
-        if (b64 != null && !b64.isEmpty()) {
-            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
-            if (bmp != null) {
-                ((ImageView) stepView.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
-                stepView.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
-                stepView.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
-            }
-        }
     }
 
     private String mapActivitesToKinds(List<String> activites) {
