@@ -69,6 +69,12 @@ public class ProfileFragment extends Fragment {
                     Navigation.findNavController(v).navigate(R.id.action_profile_to_notifications));
         }
 
+        MaterialButton btnEditProfile = view.findViewById(R.id.btn_edit_profile);
+        if (btnEditProfile != null) {
+            btnEditProfile.setOnClickListener(v ->
+                    Navigation.findNavController(v).navigate(R.id.action_profile_to_edit_profile));
+        }
+
         view.findViewById(R.id.btn_logout).setOnClickListener(v -> {
             FirebaseAuth.getInstance().signOut();
             updateUI();
@@ -83,7 +89,7 @@ public class ProfileFragment extends Fragment {
     }
 
     private void updateNotificationBadge() {
-        if (SessionManager.get().isAnonymous()) return;
+        if (SessionManager.get().isGuest()) return;
         NotificationRepository.get().getUnreadCount(count -> {
             if (!isAdded() || getActivity() == null) return;
 
@@ -113,8 +119,9 @@ public class ProfileFragment extends Fragment {
 
     private void updateUI() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        boolean isRealUser = user != null && !user.isAnonymous();
 
-        if (user != null) {
+        if (isRealUser) {
             layoutConnected.setVisibility(View.VISIBLE);
             layoutAnonymous.setVisibility(View.GONE);
 

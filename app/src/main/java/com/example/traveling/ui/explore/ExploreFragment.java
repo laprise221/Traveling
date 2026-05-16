@@ -51,6 +51,7 @@ public class ExploreFragment extends Fragment
 
     private List<Photo> loadedPhotos = new ArrayList<>();
     private List<TravelPath> loadedPaths = new ArrayList<>();
+    private List<String> followedTags = new ArrayList<>();
 
     private ViewPager2 heroViewPager;
     private LinearLayout heroDotsContainer;
@@ -107,7 +108,7 @@ public class ExploreFragment extends Fragment
         });
 
         updateContent();
-        loadPhotosFromFirestore();
+        loadFollowedTagsThenPhotos();
         loadPathsFromFirestore();
 
         searchBar.setOnClickListener(v -> {
@@ -183,11 +184,25 @@ public class ExploreFragment extends Fragment
         if (tabLayout != null) {
             tabLayout.selectTab(tabLayout.getTabAt(showingPhotos ? 0 : 1));
         }
-        // Ré-appliquer seulement si des filtres sont actifs ET que des photos sont chargées
-        if (!loadedPhotos.isEmpty() && !FilterRegistry.get().isEmpty()) {
+        // Ré-appliquer seulement si des photos sont chargées
+        if (!loadedPhotos.isEmpty()) {
             List<Photo> filtered = applyFilters(loadedPhotos);
-            photoAdapter1.setPhotos(filtered);
+            photoAdapter1.setPhotos(sortByFollowedTags(filtered));
             photoAdapter2.setPhotos(sortByPopularity(filtered));
+        }
+    }
+
+    /** Charge d'abord les tags suivis (si connecté), puis les photos. */
+    private void loadFollowedTagsThenPhotos() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null && !user.isAnonymous()) {
+            FirestoreRepository.get().loadFollowedTags(user.getUid(), tags -> {
+                followedTags = tags != null ? tags : new ArrayList<>();
+                loadPhotosFromFirestore();
+            });
+        } else {
+            followedTags = new ArrayList<>();
+            loadPhotosFromFirestore();
         }
     }
 
@@ -205,7 +220,7 @@ public class ExploreFragment extends Fragment
                         FirestoreRepository.get().checkFavoritedPhotos(all, () -> {
                             if (!isAdded()) return;
                             List<Photo> filtered = applyFilters(loadedPhotos);
-                            photoAdapter1.setPhotos(filtered);
+                            photoAdapter1.setPhotos(sortByFollowedTags(filtered));
                             photoAdapter2.setPhotos(sortByPopularity(filtered));
                         });
                     });
@@ -217,6 +232,27 @@ public class ExploreFragment extends Fragment
                 photoAdapter2.setPhotos(sortByPopularity(filtered));
             }
         });
+    }
+
+    /**
+     * Trie les photos : celles dont le type correspond à un tag suivi apparaissent en premier
+     * (ordre chronologique inversé conservé dans chaque groupe).
+     * Si aucun tag suivi, retourne la liste telle quelle (déjà triée par date desc).
+     */
+    private List<Photo> sortByFollowedTags(List<Photo> photos) {
+        if (followedTags.isEmpty()) return photos;
+        List<Photo> matched = new ArrayList<>();
+        List<Photo> rest = new ArrayList<>();
+        for (Photo p : photos) {
+            String type = p.getLocationType() != null ? p.getLocationType().toLowerCase() : "";
+            if (followedTags.contains(type)) {
+                matched.add(p);
+            } else {
+                rest.add(p);
+            }
+        }
+        matched.addAll(rest);
+        return matched;
     }
 
     private List<Photo> sortByPopularity(List<Photo> photos) {

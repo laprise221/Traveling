@@ -61,7 +61,8 @@ public class PhotoDetailFragment extends Fragment {
             return;
         }
 
-        boolean isAnonymous = SessionManager.get().isAnonymous();
+        boolean isGuest = SessionManager.get().isGuest();
+        boolean hasSession = !SessionManager.get().isAnonymous();
 
         // Toolbar
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
@@ -118,7 +119,7 @@ public class PhotoDetailFragment extends Fragment {
         // Favori (cœur)
         btnFavorite = view.findViewById(R.id.btn_favorite);
 
-        if (!isAnonymous && photo.getId() != null) {
+        if (hasSession && photo.getId() != null) {
             FirestoreRepository.get().isPhotoLiked(photo.getId(), liked -> {
                 if (!isAdded()) return;
                 photo.setLikedSilent(liked);
@@ -133,28 +134,31 @@ public class PhotoDetailFragment extends Fragment {
         updateLikeUI();
         updateFavoriteUI();
 
-        btnLike.setEnabled(!isAnonymous);
-        btnLike.setAlpha(isAnonymous ? 0.4f : 1f);
+        // Le like est autorisé même en anonyme (connexion anonyme Firebase au besoin)
+        btnLike.setEnabled(true);
+        btnLike.setAlpha(1f);
         btnLike.setOnClickListener(v -> {
-            boolean newLiked = !photo.isLiked();
-            photo.setLiked(newLiked);
-            updateLikeUI();
-            if (photo.getId() != null) {
-                FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
-                if (newLiked && photo.getAuthorId() != null) {
+            SessionManager.get().ensureFirebaseSession(() -> {
+                if (!isAdded()) return;
+                boolean newLiked = !photo.isLiked();
+                photo.setLiked(newLiked);
+                updateLikeUI();
+                if (photo.getId() != null) {
+                    FirestoreRepository.get().toggleLikePhoto(photo.getId(), newLiked, null);
                     FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
-                    if (me != null && !me.getUid().equals(photo.getAuthorId())) {
+                    if (newLiked && me != null && !me.isAnonymous() && photo.getAuthorId() != null
+                            && !me.getUid().equals(photo.getAuthorId())) {
                         String n = me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
                         NotificationRepository.get().sendNotification(
                                 photo.getAuthorId(), "like", me.getUid(), n,
                                 photo.getId(), "photo", photo.getTitle(), null);
                     }
                 }
-            }
+            });
         });
 
-        btnFavorite.setEnabled(!isAnonymous);
-        btnFavorite.setAlpha(isAnonymous ? 0.4f : 1f);
+        btnFavorite.setEnabled(!isGuest);
+        btnFavorite.setAlpha(isGuest ? 0.4f : 1f);
         btnFavorite.setOnClickListener(v -> {
             boolean newFav = !photo.isFavorited();
             photo.setFavorited(newFav);
@@ -201,7 +205,7 @@ public class PhotoDetailFragment extends Fragment {
         EditText etComment = view.findViewById(R.id.et_comment);
         ImageButton btnSend = view.findViewById(R.id.btn_send_comment);
 
-        if (isAnonymous) {
+        if (isGuest) {
             inputLayout.setVisibility(View.GONE);
             tvAnon.setVisibility(View.VISIBLE);
         } else {
