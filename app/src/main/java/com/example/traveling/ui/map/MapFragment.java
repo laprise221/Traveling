@@ -43,6 +43,7 @@ import com.example.traveling.model.Photo;
 import com.example.traveling.model.TravelPath;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -98,6 +99,10 @@ public class MapFragment extends Fragment implements LocationListener {
     // Filtre courant
     private boolean showPhotos = true;
     private boolean showPaths = true;
+
+    private FloatingActionButton fabMyLocation;
+    private GeoPoint lastKnownUserPos = null;
+    private boolean firstLocationFix = true;
 
     private LocationManager locationManager;
     private Marker userMarker;
@@ -190,6 +195,9 @@ public class MapFragment extends Fragment implements LocationListener {
             }
             showMarkers(showPhotos, showPaths);
         });
+
+        fabMyLocation = view.findViewById(R.id.fab_my_location);
+        fabMyLocation.setOnClickListener(v -> centerOnUser());
 
         loadDataFromFirestore();
         requestLocationPermission();
@@ -365,9 +373,8 @@ public class MapFragment extends Fragment implements LocationListener {
         if (ActivePathRegistry.isActive() && navBottomSheet.getVisibility() != View.VISIBLE) {
             startActivePathNavigation();
         }
-        if (ActivePathRegistry.isActive()) {
-            startLocationUpdates();
-        }
+        // Toujours démarrer la localisation pour afficher la position de l'utilisateur
+        startLocationUpdates();
     }
 
     @Override
@@ -587,19 +594,41 @@ public class MapFragment extends Fragment implements LocationListener {
     public void onLocationChanged(@NonNull Location location) {
         if (!isAdded()) return;
         GeoPoint userPos = new GeoPoint(location.getLatitude(), location.getLongitude());
+        lastKnownUserPos = userPos;
 
         if (userMarker == null) {
             userMarker = new Marker(mapView);
             userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
             userMarker.setTitle("Vous êtes ici");
+            Drawable userIcon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_user_location_marker);
+            if (userIcon != null) userMarker.setIcon(userIcon);
             mapView.getOverlays().add(userMarker);
         }
         userMarker.setPosition(userPos);
+
+        // Premier fix GPS : centrer la carte sur l'utilisateur au niveau ville
+        if (firstLocationFix) {
+            firstLocationFix = false;
+            mapView.getController().animateTo(userPos);
+            mapView.getController().setZoom(14.0);
+        }
+
         mapView.invalidate();
 
         if (ActivePathRegistry.isActive()) {
             updateNavigationOverlay(userPos);
             maybeRefreshLiveRoute(userPos);
+        }
+    }
+
+    /** Centre la carte sur la dernière position connue de l'utilisateur. */
+    private void centerOnUser() {
+        if (lastKnownUserPos != null) {
+            mapView.getController().animateTo(lastKnownUserPos);
+            mapView.getController().setZoom(15.0);
+        } else {
+            Toast.makeText(requireContext(),
+                    "Position non disponible, vérifiez le GPS", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -827,7 +856,7 @@ public class MapFragment extends Fragment implements LocationListener {
         if (requestCode == REQUEST_LOCATION_PERMISSION
                 && grantResults.length > 0
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            if (ActivePathRegistry.isActive()) startLocationUpdates();
+            startLocationUpdates();
         }
     }
 

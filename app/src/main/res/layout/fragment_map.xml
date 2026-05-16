@@ -165,6 +165,21 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- FAB : recentrer sur ma position -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_my_location"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="24dp"
+        android:src="@drawable/ic_my_location"
+        android:contentDescription="Ma position"
+        app:backgroundTint="@color/colorPrimary"
+        app:tint="@android:color/white"
+        app:fabSize="normal"
+        app:elevation="6dp" />
+
     <!-- Bottom sheet navigation parcours actif -->
     <LinearLayout
         android:id="@+id/nav_bottom_sheet"

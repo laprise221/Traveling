@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Halo extérieur bleu clair -->
+    <path
+        android:fillColor="#4D2979FF"
+        android:pathData="M16,16m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0"/>
+    <!-- Cercle blanc intermédiaire -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16,16m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0"/>
+    <!-- Point bleu central -->
+    <path
+        android:fillColor="#2979FF"
+        android:pathData="M16,16m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0"/>
+</vector>
