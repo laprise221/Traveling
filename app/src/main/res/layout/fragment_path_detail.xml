@@ -11,7 +11,7 @@
         android:id="@+id/toolbar_path_detail"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        app:navigationIcon="@drawable/ic_add"
+        app:navigationIcon="?attr/homeAsUpIndicator"
         app:title="Détail du parcours" />
 
     <ScrollView

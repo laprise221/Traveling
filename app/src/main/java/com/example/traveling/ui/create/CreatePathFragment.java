@@ -33,6 +33,7 @@ import androidx.fragment.app.Fragment;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
+import com.example.traveling.worker.SchedulePublishHelper;
 import com.example.traveling.data.GeocodingUtils;
 import com.example.traveling.data.ImageUtils;
 import com.example.traveling.data.PathRepository;
@@ -151,7 +152,7 @@ public class CreatePathFragment extends Fragment {
         view.findViewById(R.id.btn_back).setOnClickListener(v ->
                 Navigation.findNavController(v).navigateUp());
 
-        view.findViewById(R.id.btn_publish).setOnClickListener(v -> publish());
+        view.findViewById(R.id.btn_publish).setOnClickListener(v -> showPublishOptionsDialog());
 
         view.findViewById(R.id.btn_add_step).setOnClickListener(v -> showAddStepDialog());
 
@@ -617,7 +618,50 @@ public class CreatePathFragment extends Fragment {
         }
     }
 
-    private void publish() {
+    private void showPublishOptionsDialog() {
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Publier")
+                .setItems(new String[]{"Publier maintenant", "Planifier"}, (dialog, which) -> {
+                    if (which == 0) publish(null);
+                    else showScheduleDialog();
+                })
+                .show();
+    }
+
+    private void showScheduleDialog() {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        android.app.DatePickerDialog dateDialog = new android.app.DatePickerDialog(
+                requireContext(),
+                (datePicker, year, month, day) -> {
+                    android.app.TimePickerDialog timeDialog = new android.app.TimePickerDialog(
+                            requireContext(),
+                            (timePicker, hour, minute) -> {
+                                java.util.Calendar scheduled = java.util.Calendar.getInstance();
+                                scheduled.set(year, month, day, hour, minute, 0);
+                                scheduled.set(java.util.Calendar.MILLISECOND, 0);
+                                if (scheduled.getTimeInMillis() <= System.currentTimeMillis()) {
+                                    android.widget.Toast.makeText(requireContext(),
+                                            "La date doit être dans le futur",
+                                            android.widget.Toast.LENGTH_SHORT).show();
+                                    return;
+                                }
+                                publish(scheduled.getTime());
+                            },
+                            cal.get(java.util.Calendar.HOUR_OF_DAY),
+                            cal.get(java.util.Calendar.MINUTE),
+                            true
+                    );
+                    timeDialog.show();
+                },
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH),
+                cal.get(java.util.Calendar.DAY_OF_MONTH)
+        );
+        dateDialog.getDatePicker().setMinDate(System.currentTimeMillis());
+        dateDialog.show();
+    }
+
+    private void publish(java.util.Date scheduledDate) {
         String title = etTitle.getText() != null ? etTitle.getText().toString().trim() : "";
         String city = etCity.getText() != null ? etCity.getText().toString().trim() : "";
         String description = etDescription.getText() != null ? etDescription.getText().toString().trim() : "";
@@ -648,7 +692,12 @@ public class CreatePathFragment extends Fragment {
                 budgetStr,
                 difficulty.isEmpty() ? "-" : difficulty,
                 pathType, steps.size(), 0, R.drawable.sample_path_1);
-        path.setPublic(isPublic);
+        if (scheduledDate != null) {
+            path.setVisibility("scheduled");
+            path.setScheduledPublishDate(scheduledDate);
+        } else {
+            path.setPublic(isPublic);
+        }
         path.setSteps(new ArrayList<>(steps));
         if (coverImageBase64 != null) path.setImageBase64(coverImageBase64);
 
@@ -661,16 +710,16 @@ public class CreatePathFragment extends Fragment {
             public void onResult(double latitude, double longitude) {
                 finalPath.setStartLatitude(latitude);
                 finalPath.setStartLongitude(longitude);
-                savePath(finalPath, btnPublish);
+                savePath(finalPath, btnPublish, scheduledDate);
             }
             @Override
             public void onFailure() {
-                savePath(finalPath, btnPublish);
+                savePath(finalPath, btnPublish, scheduledDate);
             }
         });
     }
 
-    private void savePath(TravelPath path, View btnPublish) {
+    private void savePath(TravelPath path, View btnPublish, java.util.Date scheduledDate) {
         Log.d("CreatePath", "Saving path to Firestore...");
         PathRepository.get().savePath(path)
                 .addOnSuccessListener(docRef -> {
@@ -678,7 +727,18 @@ public class CreatePathFragment extends Fragment {
                     if (!isAdded()) return;
                     path.setId(docRef.getId());
                     UserRepository.get().addPath(path);
-                    Toast.makeText(requireContext(), "Parcours publié !", Toast.LENGTH_SHORT).show();
+                    String msg;
+                    if (scheduledDate != null) {
+                        SchedulePublishHelper.schedule(requireContext(), docRef.getId(),
+                                SchedulePublishHelper.COLLECTION_PATHS, scheduledDate);
+                        String formatted = new java.text.SimpleDateFormat(
+                                "dd MMM yyyy 'à' HH:mm", java.util.Locale.FRENCH)
+                                .format(scheduledDate);
+                        msg = "Publication planifiée pour le " + formatted;
+                    } else {
+                        msg = "Parcours publié !";
+                    }
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
                     Navigation.findNavController(requireView()).navigateUp();
                 })
                 .addOnFailureListener(e -> {
