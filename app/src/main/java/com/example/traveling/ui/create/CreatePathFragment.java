@@ -3,6 +3,7 @@ package com.example.traveling.ui.create;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.provider.MediaStore;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -21,6 +22,10 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import android.Manifest;
+import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -49,6 +54,7 @@ import android.widget.CheckBox;
 import com.google.android.material.chip.Chip;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -94,6 +100,15 @@ public class CreatePathFragment extends Fragment {
     private ActivityResultLauncher<String> stepPhotoLauncher;
     private String pendingImageBase64 = null;
     private ImageView dialogPhotoPreview = null;
+
+    private ActivityResultLauncher<String> coverGalleryLauncher;
+    private ActivityResultLauncher<Uri> coverCameraLauncher;
+    private ActivityResultLauncher<String> cameraPermissionLauncher;
+    private Uri coverCameraUri;
+    private String coverImageBase64 = null;
+    private ImageView imgCover;
+    private View coverPlaceholder;
+    private View btnChangeCover;
 
     @Nullable
     @Override
@@ -142,6 +157,41 @@ public class CreatePathFragment extends Fragment {
         view.findViewById(R.id.btn_add_step).setOnClickListener(v -> showAddStepDialog());
 
         view.findViewById(R.id.btn_generate).setOnClickListener(v -> generatePath());
+
+        imgCover = view.findViewById(R.id.img_cover);
+        coverPlaceholder = view.findViewById(R.id.cover_placeholder);
+        btnChangeCover = view.findViewById(R.id.btn_change_cover);
+
+        view.findViewById(R.id.card_cover).setOnClickListener(v -> showCoverPicker());
+        btnChangeCover.setOnClickListener(v -> showCoverPicker());
+
+        cameraPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                granted -> {
+                    if (granted) launchCamera();
+                    else Toast.makeText(requireContext(),
+                            "Permission caméra refusée", Toast.LENGTH_SHORT).show();
+                });
+
+        coverGalleryLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> {
+                    if (uri == null) return;
+                    executor.execute(() -> {
+                        String b64 = ImageUtils.uriToBase64(requireContext(), uri);
+                        mainHandler.post(() -> applyCoverImage(b64));
+                    });
+                });
+
+        coverCameraLauncher = registerForActivityResult(
+                new ActivityResultContracts.TakePicture(),
+                success -> {
+                    if (!success || coverCameraUri == null) return;
+                    executor.execute(() -> {
+                        String b64 = ImageUtils.uriToBase64(requireContext(), coverCameraUri);
+                        mainHandler.post(() -> applyCoverImage(b64));
+                    });
+                });
 
         stepPhotoLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
@@ -446,6 +496,51 @@ public class CreatePathFragment extends Fragment {
             }
         });
     }
+    private void showCoverPicker() {
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Photo de couverture")
+                .setItems(new String[]{"Galerie", "Appareil photo"}, (dialog, which) -> {
+                    if (which == 0) {
+                        coverGalleryLauncher.launch("image/*");
+                    } else {
+                        if (ContextCompat.checkSelfPermission(requireContext(),
+                                Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            launchCamera();
+                        } else {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
+                        }
+                    }
+                })
+                .show();
+    }
+
+    private void launchCamera() {
+        try {
+            File dir = requireContext().getExternalFilesDir(null);
+            if (dir == null) dir = requireContext().getCacheDir();
+            File tmp = File.createTempFile("cover_", ".jpg", dir);
+            coverCameraUri = FileProvider.getUriForFile(requireContext(),
+                    "com.example.traveling.fileprovider", tmp);
+            coverCameraLauncher.launch(coverCameraUri);
+        } catch (Exception e) {
+            Log.e("CreatePath", "Camera launch failed", e);
+            Toast.makeText(requireContext(),
+                    "Erreur caméra : " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void applyCoverImage(String b64) {
+        if (!isAdded() || b64 == null) return;
+        coverImageBase64 = b64;
+        Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+        if (bmp != null) {
+            imgCover.setImageBitmap(bmp);
+            imgCover.setVisibility(View.VISIBLE);
+            coverPlaceholder.setVisibility(View.GONE);
+            btnChangeCover.setVisibility(View.VISIBLE);
+        }
+    }
+
     private void showAddStepDialog() {
         pendingImageBase64 = null;
 
@@ -604,6 +699,7 @@ public class CreatePathFragment extends Fragment {
             path.setPublic(isPublic);
         }
         path.setSteps(new ArrayList<>(steps));
+        if (coverImageBase64 != null) path.setImageBase64(coverImageBase64);
 
         View btnPublish = requireView().findViewById(R.id.btn_publish);
         btnPublish.setEnabled(false);
