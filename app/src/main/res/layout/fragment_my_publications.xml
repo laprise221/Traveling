@@ -33,6 +33,15 @@
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btn_filter"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_filter"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Filtrer"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Tabs Photos / Parcours -->
