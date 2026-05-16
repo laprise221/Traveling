@@ -1,7 +1,9 @@
 package com.example.traveling.ui.create;
 
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.provider.MediaStore;
 import android.os.Bundle;
@@ -100,6 +102,9 @@ public class CreatePathFragment extends Fragment {
     private Runnable pendingSearch;
     private double geocodedLat = 0;
     private double geocodedLon = 0;
+
+    private final List<View> optionCardViews = new ArrayList<>();
+    private final List<Integer> optionCardColors = new ArrayList<>();
 
     private ActivityResultLauncher<String> stepPhotoLauncher;
     private String pendingImageBase64 = null;
@@ -1146,43 +1151,114 @@ public class CreatePathFragment extends Fragment {
 
     private void displayOptions(List<PathOption> options, int dureeMax) {
         optionsContainer.removeAllViews();
+        optionCardViews.clear();
+        optionCardColors.clear();
         selectedOption = null;
         steps.clear();
         stepsContainer.removeAllViews();
 
         tvOptionsTitle.setVisibility(View.VISIBLE);
 
-        for (PathOption option : options) {
+        for (int pos = 0; pos < options.size(); pos++) {
+            PathOption option = options.get(pos);
             View card = LayoutInflater.from(requireContext())
                     .inflate(R.layout.item_path_option, optionsContainer, false);
 
-            TextView tvName = card.findViewById(R.id.tv_option_name);
-            TextView tvMetrics = card.findViewById(R.id.tv_option_metrics);
-            TextView tvSteps = card.findViewById(R.id.tv_option_steps);
-            com.google.android.material.button.MaterialButton btnSelect =
-                    card.findViewById(R.id.btn_option_select);
+            // Couleur, icône et sous-titre selon le type
+            int color;
+            String icon, subtitle;
+            switch (option.name.toLowerCase()) {
+                case "économique":
+                    color = Color.parseColor("#22C55E");
+                    icon = "🌿";
+                    subtitle = "Sites gratuits · budget maîtrisé";
+                    break;
+                case "confort":
+                    color = Color.parseColor("#F59E0B");
+                    icon = "✨";
+                    subtitle = "Expérience complète · lieux premium";
+                    break;
+                default: // équilibré
+                    color = Color.parseColor("#6366F1");
+                    icon = "⚖";
+                    subtitle = "Bon rapport qualité / expérience";
+                    break;
+            }
 
-            tvName.setText(option.name);
-            tvMetrics.setText(option.steps.size() + " étapes · ~"
-                    + String.format("%.1f", option.totalDistanceKm) + " km · ~"
-                    + option.estimatedBudget + " €");
+            // Bande de couleur en haut
+            card.findViewById(R.id.view_option_accent).setBackgroundColor(color);
 
+            // Icône + fond coloré
+            TextView tvIcon = card.findViewById(R.id.tv_option_icon);
+            tvIcon.setText(icon);
+            tvIcon.getBackground().setTint(color);
+
+            // Nom + sous-titre
+            ((TextView) card.findViewById(R.id.tv_option_name)).setText(option.name);
+            ((TextView) card.findViewById(R.id.tv_option_subtitle)).setText(subtitle);
+
+            // Badge "Recommandé" sur l'option du milieu
+            if (pos == options.size() / 2) {
+                com.google.android.material.chip.Chip chip = card.findViewById(R.id.chip_recommended);
+                chip.setVisibility(View.VISIBLE);
+                chip.setChipBackgroundColor(ColorStateList.valueOf(color));
+            }
+
+            // Métriques séparées
+            ((TextView) card.findViewById(R.id.tv_opt_steps_count))
+                    .setText(String.valueOf(option.steps.size()));
+            ((TextView) card.findViewById(R.id.tv_opt_distance))
+                    .setText(String.format("%.1f km", option.totalDistanceKm));
+            ((TextView) card.findViewById(R.id.tv_opt_budget))
+                    .setText("~" + option.estimatedBudget + " €");
+
+            // Séquence des étapes
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < option.steps.size(); i++) {
                 if (i > 0) sb.append(" → ");
                 sb.append(option.steps.get(i).getName());
             }
-            tvSteps.setText(sb.toString());
+            ((TextView) card.findViewById(R.id.tv_option_steps)).setText(sb.toString());
 
-            btnSelect.setOnClickListener(v -> selectOption(option));
-            card.setOnClickListener(v -> selectOption(option));
+            // Bouton couleur de l'option
+            com.google.android.material.button.MaterialButton btnSelect =
+                    card.findViewById(R.id.btn_option_select);
+            btnSelect.setBackgroundTintList(ColorStateList.valueOf(color));
+            btnSelect.setOnClickListener(v -> selectOption(option, card, color));
+            card.setOnClickListener(v -> selectOption(option, card, color));
 
+            optionCardViews.add(card);
+            optionCardColors.add(color);
             optionsContainer.addView(card);
         }
     }
 
-    private void selectOption(PathOption option) {
+    private void selectOption(PathOption option, View selectedCard, int color) {
         selectedOption = option;
+
+        // Reset visual de toutes les cartes
+        for (int i = 0; i < optionCardViews.size(); i++) {
+            com.google.android.material.card.MaterialCardView cv =
+                    (com.google.android.material.card.MaterialCardView) optionCardViews.get(i);
+            cv.setStrokeColor(Color.parseColor("#E5E7EB"));
+            cv.setStrokeWidth(2);
+            cv.setCardElevation(2f);
+            com.google.android.material.button.MaterialButton btn =
+                    cv.findViewById(R.id.btn_option_select);
+            btn.setText("Choisir ce parcours");
+            btn.setBackgroundTintList(ColorStateList.valueOf(optionCardColors.get(i)));
+        }
+
+        // Mettre en valeur la carte sélectionnée
+        com.google.android.material.card.MaterialCardView selectedCv =
+                (com.google.android.material.card.MaterialCardView) selectedCard;
+        selectedCv.setStrokeColor(color);
+        selectedCv.setStrokeWidth(4);
+        selectedCv.setCardElevation(6f);
+        com.google.android.material.button.MaterialButton btnSelected =
+                selectedCard.findViewById(R.id.btn_option_select);
+        btnSelected.setText("✓ Parcours sélectionné");
+
         steps.clear();
         stepsContainer.removeAllViews();
         for (PathStep step : option.steps) {
@@ -1190,9 +1266,6 @@ public class CreatePathFragment extends Fragment {
             addStepView(step, steps.size());
         }
         enrichStepsWithDetails();
-        Toast.makeText(requireContext(),
-                "Parcours « " + option.name + " » sélectionné",
-                Toast.LENGTH_SHORT).show();
     }
 
     private void enrichStepsWithDetails() {
