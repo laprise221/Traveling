@@ -42,6 +42,7 @@ import com.example.traveling.model.PathStep;
 import com.example.traveling.model.TravelPath;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.chip.Chip;
 
 import org.json.JSONArray;
@@ -65,10 +66,12 @@ import java.util.concurrent.Executors;
 public class PathDetailFragment extends Fragment {
 
     private static final String ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ4YWFkZjhlMWY3ZDQ2NjU4YmYxYzM1OTllM2RiN2QwIiwiaCI6Im11cm11cjY0In0=";
+    private static final String OTM_API_KEY = "5ae2e3f221c38a28845f05b64ceacf3f82755ce118bd16981c7984e8";
 
     private MapView mapView;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final List<View> stepViewList = new ArrayList<>();
 
     @Nullable
     @Override
@@ -136,9 +139,11 @@ public class PathDetailFragment extends Fragment {
 
         List<PathStep> steps = path.getSteps();
         if (steps != null && !steps.isEmpty()) {
+            stepViewList.clear();
             for (int i = 0; i < steps.size(); i++) {
                 addStepToList(stepsContainer, steps.get(i), i + 1);
             }
+            enrichMissingImages(steps);
             displayStepsOnMap(steps);
             fetchRoute(steps);
         } else {
@@ -189,7 +194,280 @@ public class PathDetailFragment extends Fragment {
             }
         }
 
+        stepView.setOnClickListener(v -> showStepDetailSheet(step, index));
+
+        stepViewList.add(stepView);
         container.addView(stepView);
+    }
+
+    private void enrichMissingImages(List<PathStep> steps) {
+        for (int i = 0; i < steps.size(); i++) {
+            PathStep step = steps.get(i);
+            if ((step.getImageUrl() != null && !step.getImageUrl().isEmpty())
+                    || (step.getImageBase64() != null && !step.getImageBase64().isEmpty())) {
+                continue; // image déjà disponible
+            }
+            int idx = i;
+            executor.execute(() -> {
+                // 1. OpenTripMap par coordonnées (meilleure couverture POI touristique)
+                String url = null;
+                if (step.getLatitude() != 0 || step.getLongitude() != 0) {
+                    url = fetchImageUrlFromOTM(step.getLatitude(), step.getLongitude());
+                }
+                // 2. Wikipedia par nom (fallback)
+                if (url == null) {
+                    url = fetchImageUrlFromWikipedia(step.getName());
+                }
+                if (url == null) return;
+
+                step.setImageUrl(url); // mémorisé pour le bottom sheet
+                Bitmap bmp = downloadBitmap(url);
+                if (bmp == null) return;
+
+                mainHandler.post(() -> {
+                    if (!isAdded() || idx >= stepViewList.size()) return;
+                    View sv = stepViewList.get(idx);
+                    ((ImageView) sv.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
+                    sv.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
+                    sv.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
+                });
+            });
+        }
+    }
+
+    private String fetchImageUrlFromOTM(double lat, double lon) {
+        try {
+            URL url = new URL("https://api.opentripmap.com/0.1/en/places/radius"
+                    + "?radius=80&lon=" + lon + "&lat=" + lat
+                    + "&format=json&limit=5&apikey=" + OTM_API_KEY);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
+            if (conn.getResponseCode() != 200) return null;
+
+            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = r.readLine()) != null) sb.append(l);
+            r.close();
+
+            JSONArray features = new JSONArray(sb.toString());
+            for (int i = 0; i < features.length(); i++) {
+                JSONObject props = features.getJSONObject(i).optJSONObject("properties");
+                if (props == null) continue;
+                String xid = props.optString("xid", "");
+                if (xid.isEmpty()) continue;
+
+                URL xidUrl = new URL("https://api.opentripmap.com/0.1/en/places/xid/"
+                        + xid + "?apikey=" + OTM_API_KEY);
+                HttpURLConnection xidConn = (HttpURLConnection) xidUrl.openConnection();
+                xidConn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                xidConn.setConnectTimeout(6000);
+                xidConn.setReadTimeout(6000);
+                if (xidConn.getResponseCode() != 200) continue;
+
+                BufferedReader xr = new BufferedReader(
+                        new InputStreamReader(xidConn.getInputStream()));
+                StringBuilder xsb = new StringBuilder();
+                String xl;
+                while ((xl = xr.readLine()) != null) xsb.append(xl);
+                xr.close();
+
+                JSONObject detail = new JSONObject(xsb.toString());
+                String imgUrl = null;
+                if (detail.has("preview")) {
+                    imgUrl = detail.getJSONObject("preview").optString("source", null);
+                }
+                if (imgUrl == null || imgUrl.isEmpty()) {
+                    String img = detail.optString("image", "");
+                    if (img.startsWith("http")) imgUrl = img;
+                }
+                if (imgUrl != null && !imgUrl.isEmpty()) return imgUrl;
+            }
+        } catch (Exception e) {
+            Log.d("PathDetail", "OTM image fetch failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private String fetchImageUrlFromWikipedia(String name) {
+        try {
+            String encoded = java.net.URLEncoder.encode(name, "UTF-8");
+            for (String lang : new String[]{"fr", "en"}) {
+                URL searchUrl = new URL("https://" + lang
+                        + ".wikipedia.org/w/api.php?action=query"
+                        + "&generator=search&gsrsearch=" + encoded
+                        + "&gsrlimit=1&prop=pageimages&piprop=thumbnail"
+                        + "&pithumbsize=600&format=json");
+                HttpURLConnection conn = (HttpURLConnection) searchUrl.openConnection();
+                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                if (conn.getResponseCode() != 200) continue;
+
+                BufferedReader r = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String l;
+                while ((l = r.readLine()) != null) sb.append(l);
+                r.close();
+
+                JSONObject data = new JSONObject(sb.toString());
+                JSONObject query = data.optJSONObject("query");
+                if (query == null) continue;
+                JSONObject pages = query.optJSONObject("pages");
+                if (pages == null || pages.length() == 0) continue;
+
+                JSONObject page = pages.getJSONObject(pages.keys().next());
+                JSONObject thumbnail = page.optJSONObject("thumbnail");
+                if (thumbnail == null) continue;
+                String imgUrl = thumbnail.optString("source", null);
+                if (imgUrl != null && !imgUrl.isEmpty()) return imgUrl;
+            }
+        } catch (Exception e) {
+            Log.d("PathDetail", "Wikipedia image fetch failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private void showStepDetailSheet(PathStep step, int index) {
+        BottomSheetDialog dialog = new BottomSheetDialog(requireContext());
+        View sheet = LayoutInflater.from(requireContext())
+                .inflate(R.layout.bottom_sheet_step_detail, null);
+        dialog.setContentView(sheet);
+
+        ((TextView) sheet.findViewById(R.id.sheet_step_number)).setText(String.valueOf(index));
+        ((TextView) sheet.findViewById(R.id.sheet_step_name)).setText(step.getName());
+
+        // --- Prix et description ---
+        String rawDesc = step.getDescription() != null ? step.getDescription() : "";
+        String price = "—";
+        String cleanDesc = rawDesc;
+
+        if (rawDesc.startsWith("Entrée") || rawDesc.startsWith("entrée")) {
+            int nl = rawDesc.indexOf('\n');
+            if (nl > 0) {
+                price = rawDesc.substring(0, nl).trim();
+                cleanDesc = rawDesc.substring(nl + 1).trim();
+            } else {
+                price = rawDesc.trim();
+                cleanDesc = "";
+            }
+        }
+
+        ((TextView) sheet.findViewById(R.id.sheet_price_value)).setText(price);
+
+        TextView tvDesc = sheet.findViewById(R.id.sheet_step_desc);
+        TextView tvNoDesc = sheet.findViewById(R.id.sheet_no_desc);
+        if (!cleanDesc.isEmpty()) {
+            tvDesc.setText(cleanDesc);
+            tvDesc.setVisibility(View.VISIBLE);
+        } else {
+            tvNoDesc.setVisibility(View.VISIBLE);
+        }
+
+        // --- Image ---
+        ImageView imgView = sheet.findViewById(R.id.sheet_img);
+        String imageUrl = step.getImageUrl();
+        String b64 = step.getImageBase64();
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            // URL déjà disponible (enrichissement effectué avant publication)
+            executor.execute(() -> {
+                Bitmap bmp = downloadBitmap(imageUrl);
+                mainHandler.post(() -> {
+                    if (!isAdded() || bmp == null) return;
+                    imgView.setImageBitmap(bmp);
+                });
+            });
+        } else if (b64 != null && !b64.isEmpty()) {
+            // Photo choisie manuellement
+            Bitmap bmp = ImageUtils.base64ToBitmap(b64);
+            if (bmp != null) imgView.setImageBitmap(bmp);
+        } else {
+            // Pas encore enrichi : chercher OTM puis Wikipedia à la demande
+            executor.execute(() -> {
+                String url = null;
+                if (step.getLatitude() != 0 || step.getLongitude() != 0) {
+                    url = fetchImageUrlFromOTM(step.getLatitude(), step.getLongitude());
+                }
+                if (url == null) url = fetchImageUrlFromWikipedia(step.getName());
+                if (url != null) step.setImageUrl(url);
+                Bitmap bmp = url != null ? downloadBitmap(url) : null;
+                mainHandler.post(() -> {
+                    if (!isAdded() || bmp == null) return;
+                    imgView.setImageBitmap(bmp);
+                });
+            });
+        }
+
+        // --- Horaires via Overpass ---
+        TextView tvHours = sheet.findViewById(R.id.sheet_hours_value);
+        if (step.getLatitude() != 0 || step.getLongitude() != 0) {
+            executor.execute(() -> {
+                String hours = fetchOpeningHours(step.getLatitude(), step.getLongitude());
+                mainHandler.post(() -> {
+                    if (!isAdded()) return;
+                    tvHours.setText(hours != null ? hours : "Non renseigné");
+                });
+            });
+        } else {
+            tvHours.setText("Non renseigné");
+        }
+
+        // --- Bouton Maps ---
+        sheet.findViewById(R.id.sheet_btn_maps).setOnClickListener(v -> {
+            Uri uri = Uri.parse("geo:" + step.getLatitude() + "," + step.getLongitude()
+                    + "?q=" + Uri.encode(step.getName()));
+            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+            intent.setPackage("com.google.android.apps.maps");
+            if (intent.resolveActivity(requireContext().getPackageManager()) == null) {
+                intent.setPackage(null);
+            }
+            try {
+                startActivity(intent);
+            } catch (Exception e) {
+                Toast.makeText(requireContext(), "Aucune application de carte disponible",
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        dialog.show();
+    }
+
+    private String fetchOpeningHours(double lat, double lon) {
+        try {
+            String query = "[out:json][timeout:8];"
+                    + "(node(around:100," + lat + "," + lon + ")[\"opening_hours\"];"
+                    + "way(around:100," + lat + "," + lon + ")[\"opening_hours\"];);"
+                    + "out tags;";
+            URL url = new URL("https://overpass-api.de/api/interpreter?data="
+                    + java.net.URLEncoder.encode(query, "UTF-8"));
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() != 200) return null;
+
+            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = r.readLine()) != null) sb.append(l);
+            r.close();
+
+            JSONArray elements = new JSONObject(sb.toString()).optJSONArray("elements");
+            if (elements == null || elements.length() == 0) return null;
+
+            for (int i = 0; i < elements.length(); i++) {
+                JSONObject tags = elements.getJSONObject(i).optJSONObject("tags");
+                if (tags == null) continue;
+                String oh = tags.optString("opening_hours", "");
+                if (!oh.isEmpty()) return oh;
+            }
+        } catch (Exception e) {
+            Log.d("PathDetail", "Opening hours fetch failed: " + e.getMessage());
+        }
+        return null;
     }
 
     private Bitmap downloadBitmap(String urlStr) {
