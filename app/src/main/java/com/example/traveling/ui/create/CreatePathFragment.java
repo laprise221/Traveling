@@ -457,18 +457,20 @@ public class CreatePathFragment extends Fragment {
                         + ", radius: " + radius + "m, maxSteps: " + maxSteps);
 
                 double maxRouteKm = maxWalkKm(effort, dureeMax);
+                int totalTimeMin = dureeMax * 60;
                 List<PathOption> generatedOptions = new ArrayList<>();
-                // costPerStep = frais annexes par étape (boisson, transport local)
-                // le coût d'entrée réel est estimé par estimatePOICost() selon la catégorie
                 generatedOptions.add(buildOption(
                         "Économique", filteredPOIs,
-                        Math.max(2, maxSteps - 1), true, false, 3, maxRouteKm));
+                        Math.max(2, maxSteps - 1), true, 3,
+                        maxRouteKm, budget, totalTimeMin, activites));
                 generatedOptions.add(buildOption(
                         "Équilibré", filteredPOIs,
-                        maxSteps, false, false, 5, maxRouteKm));
+                        maxSteps, false, 5,
+                        maxRouteKm, budget, totalTimeMin, activites));
                 generatedOptions.add(buildOption(
                         "Confort", filteredPOIs,
-                        maxSteps + 1, false, true, 10, maxRouteKm));
+                        maxSteps + 1, false, 10,
+                        maxRouteKm, (int) (budget * 1.3), totalTimeMin, activites));
 
                 // ---- ÉTAPE 6 : Construire le résumé ----
                 String meteoInfo;
@@ -852,10 +854,6 @@ public class CreatePathFragment extends Fragment {
                 if (estExterieur) continue;
             }
 
-            // Exclure les lieux dont le coût d'entrée dépasse le budget par étape
-            int perStepBudget = budget / Math.max(2, maxSteps);
-            if (estimatePOICost(poi) > perStepBudget) continue;
-
             filtered.add(poi);
         }
 
@@ -891,13 +889,10 @@ public class CreatePathFragment extends Fragment {
     }
 
     private int getMaxSteps(int dureeHeures, String effort) {
-        int minutesParEtape;
-        switch (effort.toLowerCase()) {
-            case "facile":    minutesParEtape = 90; break;
-            case "difficile": minutesParEtape = 40; break;
-            default:          minutesParEtape = 60; break;
-        }
-        return Math.max(2, (dureeHeures * 60) / minutesParEtape);
+        // Plafond basé sur 20 min par étape (visite très courte) :
+        // la contrainte temps dans buildOption est le vrai limiteur.
+        // Ex : 5h → 15 candidats max, mais le temps stoppe à ~10 étapes réelles.
+        return Math.max(3, (dureeHeures * 60) / 20);
     }
 
     private int getRadiusForEffort(String effort, int dureeHeures) {
@@ -943,96 +938,191 @@ public class CreatePathFragment extends Fragment {
         final List<PathStep> steps;
         final double totalDistanceKm;
         final int estimatedBudget;
+        final int estimatedDurationMin;
 
         PathOption(String name, List<PathStep> steps,
-                   double totalDistanceKm, int estimatedBudget) {
+                   double totalDistanceKm, int estimatedBudget, int estimatedDurationMin) {
             this.name = name;
             this.steps = steps;
             this.totalDistanceKm = totalDistanceKm;
             this.estimatedBudget = estimatedBudget;
+            this.estimatedDurationMin = estimatedDurationMin;
         }
     }
 
+    /**
+     * Durée de visite estimée par type de lieu (minutes).
+     */
+    private int estimateVisitDuration(JSONObject poi) {
+        String kinds = poi.optString("kinds", "").toLowerCase();
+        if (kinds.contains("museums"))                                   return 90;
+        if (kinds.contains("theatres") || kinds.contains("cinemas"))     return 120;
+        if (kinds.contains("restaurants") || kinds.contains("foods"))    return 60;
+        if (kinds.contains("cafes"))                                     return 30;
+        if (kinds.contains("beaches"))                                   return 90;
+        if (kinds.contains("parks") || kinds.contains("gardens"))        return 40;
+        if (kinds.contains("amusements"))                                return 60;
+        if (kinds.contains("religion") || kinds.contains("churches"))    return 25;
+        if (kinds.contains("view_points"))                               return 20;
+        if (kinds.contains("historic") || kinds.contains("architecture")) return 20;
+        if (kinds.contains("monuments"))                                 return 15;
+        return 20;
+    }
+
+    /**
+     * Score de pertinence d'un POI vis-à-vis des activités sélectionnées (0 à N matches).
+     */
+    private int activityMatchScore(JSONObject poi, List<String> selectedActivities) {
+        if (selectedActivities == null || selectedActivities.isEmpty()) return 1;
+        String kinds = poi.optString("kinds", "").toLowerCase();
+        int matches = 0;
+        for (String activity : selectedActivities) {
+            switch (activity.toLowerCase()) {
+                case "culture":
+                    if (kinds.contains("museums") || kinds.contains("historic")
+                            || kinds.contains("architecture") || kinds.contains("religion")) matches++;
+                    break;
+                case "restauration":
+                    if (kinds.contains("restaurants") || kinds.contains("foods")
+                            || kinds.contains("cafes")) matches++;
+                    break;
+                case "loisirs":
+                    if (kinds.contains("amusements") || kinds.contains("cinemas")
+                            || kinds.contains("theatres")) matches++;
+                    break;
+                case "nature":
+                    if (kinds.contains("parks") || kinds.contains("gardens")
+                            || kinds.contains("beaches") || kinds.contains("natural")) matches++;
+                    break;
+                case "découverte":
+                    if (kinds.contains("view_points") || kinds.contains("monuments")
+                            || kinds.contains("interesting_places")) matches++;
+                    break;
+            }
+        }
+        return matches;
+    }
+
+    /**
+     * Sélectionne les meilleures étapes selon un score combiné, en respectant
+     * les contraintes dures de temps et de budget.
+     *
+     * Score = rate×5 (qualité OTM) + activityMatch×20 (pertinence activités) − walkKm×2 (compacité)
+     */
     private PathOption buildOption(String name, List<JSONObject> pool, int maxSteps,
-                                   boolean excludeExpensive, boolean preferClose,
-                                   int overheadPerStep, double maxRouteKm) throws JSONException {
-        List<JSONObject> pois = new ArrayList<>();
+                                   boolean excludeExpensive, int overheadPerStep,
+                                   double maxRouteKm, int totalBudget, int totalTimeMin,
+                                   List<String> selectedActivities) throws JSONException {
+        List<JSONObject> candidates = new ArrayList<>();
         for (JSONObject poi : pool) {
-            // Pour "Économique", exclure les lieux payants (musées, restos)
             if (excludeExpensive && estimatePOICost(poi) >= 10) continue;
-            pois.add(poi);
+            candidates.add(poi);
         }
 
         List<PathStep> picked = new ArrayList<>();
         java.util.Map<PathStep, Integer> admissionCosts = new java.util.IdentityHashMap<>();
+        java.util.Map<PathStep, Integer> visitDurations = new java.util.IdentityHashMap<>();
+        int remainingBudget = totalBudget;
+        int remainingTimeMin = totalTimeMin;
 
-        for (int idx = 0; idx < pois.size(); idx++) {
-            JSONObject first = pois.get(idx);
-            if (!first.has("point") || !first.has("name") || first.getString("name").isEmpty())
-                continue;
-            JSONObject fp = first.getJSONObject("point");
-            PathStep firstStep = new PathStep(first.getString("name"), "",
-                    fp.optDouble("lat", 0), fp.optDouble("lon", 0), null, null);
-            firstStep.setXid(first.optString("xid", ""));
-            admissionCosts.put(firstStep, estimatePOICost(first));
-            picked.add(firstStep);
-            pois.remove(idx);
-            break;
-        }
+        // Ideal leg distance: spread steps evenly across walking budget
+        double targetLegKm = maxRouteKm / Math.max(maxSteps, 2);
 
-        while (picked.size() < maxSteps && !pois.isEmpty()) {
-            double bestScore = preferClose ? Double.MAX_VALUE : -1;
+        while (picked.size() < maxSteps && !candidates.isEmpty()) {
+            double bestScore = -Double.MAX_VALUE;
             int bestIdx = -1;
-            double bestLat = 0, bestLon = 0;
-            String bestName = "";
-            String bestXid = "";
-            int bestCost = 0;
 
-            for (int i = 0; i < pois.size(); i++) {
-                JSONObject poi = pois.get(i);
-                if (!poi.has("point") || !poi.has("name") || poi.getString("name").isEmpty())
-                    continue;
+            for (int i = 0; i < candidates.size(); i++) {
+                JSONObject poi = candidates.get(i);
+                if (!poi.has("point") || !poi.has("name")
+                        || poi.getString("name").isEmpty()) continue;
+
                 JSONObject pt = poi.getJSONObject("point");
                 double pLat = pt.optDouble("lat", 0);
                 double pLon = pt.optDouble("lon", 0);
-                String pName = poi.getString("name");
 
-                boolean sameName = false;
+                // No duplicate names
+                boolean seen = false;
                 for (PathStep s : picked) {
-                    if (s.getName().equals(pName)) { sameName = true; break; }
+                    if (s.getName().equals(poi.getString("name"))) { seen = true; break; }
                 }
-                if (sameName) continue;
+                if (seen) continue;
 
-                double minDist = Double.MAX_VALUE;
+                // Hard minimum 150 m between any two steps (prevent micro-clustering)
+                boolean tooClose = false;
                 for (PathStep s : picked) {
-                    double d = distanceKm(s.getLatitude(), s.getLongitude(), pLat, pLon);
-                    if (d < minDist) minDist = d;
+                    if (distanceKm(s.getLatitude(), s.getLongitude(), pLat, pLon) < 0.15) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (tooClose) continue;
+
+                // Walk from the last picked step (chain-based path building)
+                double walkKm = 0;
+                if (!picked.isEmpty()) {
+                    PathStep last = picked.get(picked.size() - 1);
+                    walkKm = distanceKm(last.getLatitude(), last.getLongitude(), pLat, pLon);
+                }
+                int walkMin = (int) Math.ceil(walkKm * 12); // 5 km/h → 12 min/km
+                int visitMin = estimateVisitDuration(poi);
+
+                // Hard budget constraint
+                int cost = estimatePOICost(poi) + overheadPerStep;
+                if (cost > remainingBudget) continue;
+
+                // Hard time constraint (walk from last step + visit time)
+                if (walkMin + visitMin > remainingTimeMin) continue;
+
+                // Score: popularity + activity relevance + geographic spread
+                int rate = poi.optInt("rate", 0);
+                int activityMatch = activityMatchScore(poi, selectedActivities);
+
+                double spreadScore;
+                if (picked.isEmpty()) {
+                    spreadScore = 0;
+                } else if (walkKm < 0.3) {
+                    spreadScore = -20; // penalise clustering (< 300 m)
+                } else if (walkKm <= targetLegKm * 1.5) {
+                    spreadScore = 20 - Math.abs(walkKm - targetLegKm) * 4; // reward ideal leg
+                } else {
+                    spreadScore = 5 - (walkKm - targetLegKm * 1.5) * 6; // penalise long detours
                 }
 
-                boolean better = preferClose ? (minDist < bestScore) : (minDist > bestScore);
-                if (better) {
-                    bestScore = minDist;
+                double score = rate * 20.0 + activityMatch * 12.0 + spreadScore;
+
+                if (score > bestScore) {
+                    bestScore = score;
                     bestIdx = i;
-                    bestLat = pLat;
-                    bestLon = pLon;
-                    bestName = pName;
-                    bestXid = poi.optString("xid", "");
-                    bestCost = estimatePOICost(poi);
                 }
             }
 
             if (bestIdx == -1) break;
-            PathStep bestStep = new PathStep(bestName, "", bestLat, bestLon, null, null);
-            bestStep.setXid(bestXid);
-            admissionCosts.put(bestStep, bestCost);
-            picked.add(bestStep);
-            pois.remove(bestIdx);
+
+            JSONObject chosen = candidates.remove(bestIdx);
+            JSONObject pt = chosen.getJSONObject("point");
+            double pLat = pt.optDouble("lat", 0);
+            double pLon = pt.optDouble("lon", 0);
+
+            double walkKm = 0;
+            if (!picked.isEmpty()) {
+                PathStep last = picked.get(picked.size() - 1);
+                walkKm = distanceKm(last.getLatitude(), last.getLongitude(), pLat, pLon);
+            }
+            remainingBudget -= (estimatePOICost(chosen) + overheadPerStep);
+            remainingTimeMin -= ((int) Math.ceil(walkKm * 12) + estimateVisitDuration(chosen));
+
+            PathStep step = new PathStep(chosen.getString("name"), "", pLat, pLon, null, null);
+            step.setXid(chosen.optString("xid", ""));
+            admissionCosts.put(step, estimatePOICost(chosen));
+            visitDurations.put(step, estimateVisitDuration(chosen));
+            picked.add(step);
         }
 
-        // Reorder for shortest open path
+        // TSP optimisation for best walking order across selected steps
         picked = optimalOrder(picked);
 
-        // Écrêter si le total dépasse le budget de marche
+        // Trim if total route distance exceeds walking budget
         while (picked.size() > 2) {
             double total = 0;
             for (int i = 1; i < picked.size(); i++) {
@@ -1044,19 +1134,24 @@ public class CreatePathFragment extends Fragment {
             picked.remove(picked.size() - 1);
         }
 
+        // Compute final metrics from the TSP-ordered, trimmed path
         double totalKm = 0;
-        for (int i = 1; i < picked.size(); i++) {
-            totalKm += distanceKm(
-                    picked.get(i - 1).getLatitude(), picked.get(i - 1).getLongitude(),
-                    picked.get(i).getLatitude(), picked.get(i).getLongitude());
+        int estBudget = 0;
+        int estDuration = 0;
+        for (int i = 0; i < picked.size(); i++) {
+            PathStep s = picked.get(i);
+            estBudget += admissionCosts.getOrDefault(s, 0) + overheadPerStep;
+            estDuration += visitDurations.getOrDefault(s, 20);
+            if (i > 0) {
+                double legKm = distanceKm(
+                        picked.get(i - 1).getLatitude(), picked.get(i - 1).getLongitude(),
+                        s.getLatitude(), s.getLongitude());
+                totalKm += legKm;
+                estDuration += (int) (legKm * 12);
+            }
         }
 
-        // Budget = coût d'entrée réel par lieu + frais annexes (boissons, transport local)
-        int estBudget = 0;
-        for (PathStep s : picked) {
-            estBudget += admissionCosts.getOrDefault(s, 0) + overheadPerStep;
-        }
-        return new PathOption(name, picked, totalKm, estBudget);
+        return new PathOption(name, picked, totalKm, estBudget, estDuration);
     }
 
     private int estimatePOICost(JSONObject poi) {
@@ -1222,8 +1317,12 @@ public class CreatePathFragment extends Fragment {
             // Métriques séparées
             ((TextView) card.findViewById(R.id.tv_opt_steps_count))
                     .setText(String.valueOf(option.steps.size()));
-            ((TextView) card.findViewById(R.id.tv_opt_distance))
-                    .setText(String.format("%.1f km", option.totalDistanceKm));
+            // Distance + durée estimée
+            int h = option.estimatedDurationMin / 60;
+            int m = option.estimatedDurationMin % 60;
+            String dur = h > 0 ? h + "h" + (m > 0 ? String.format("%02d", m) : "") : m + " min";
+            String distDur = String.format("%.1f km · %s", option.totalDistanceKm, dur);
+            ((TextView) card.findViewById(R.id.tv_opt_distance)).setText(distDur);
             ((TextView) card.findViewById(R.id.tv_opt_budget))
                     .setText("~" + option.estimatedBudget + " €");
 
