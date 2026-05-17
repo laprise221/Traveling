@@ -485,6 +485,9 @@ public class MapFragment extends Fragment implements LocationListener {
         });
     }
 
+    private static final String ORS_API_KEY =
+            "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQ4YWFkZjhlMWY3ZDQ2NjU4YmYxYzM1OTllM2RiN2QwIiwiaCI6Im11cm11cjY0In0=";
+
     private void fetchAndDrawRoute(List<PathStep> steps) {
         List<PathStep> validSteps = new ArrayList<>();
         for (PathStep s : steps) {
@@ -493,23 +496,34 @@ public class MapFragment extends Fragment implements LocationListener {
         if (validSteps.size() < 2) return;
 
         executor.execute(() -> {
+            List<GeoPoint> routePoints = new ArrayList<>();
             try {
-                StringBuilder coords = new StringBuilder();
-                for (int i = 0; i < validSteps.size(); i++) {
-                    if (i > 0) coords.append(";");
-                    coords.append(validSteps.get(i).getLongitude())
-                          .append(",").append(validSteps.get(i).getLatitude());
+                // Same API as PathDetailFragment: OpenRouteService foot-walking
+                JSONArray coordsArr = new JSONArray();
+                for (PathStep s : validSteps) {
+                    JSONArray c = new JSONArray();
+                    c.put(s.getLongitude());
+                    c.put(s.getLatitude());
+                    coordsArr.put(c);
                 }
-                String urlStr = "https://router.project-osrm.org/route/v1/foot/"
-                        + coords + "?overview=full&geometries=geojson";
+                JSONObject body = new JSONObject();
+                body.put("coordinates", coordsArr);
+                body.put("instructions", false);
 
-                URL url = new URL(urlStr);
+                URL url = new URL(
+                        "https://api.openrouteservice.org/v2/directions/foot-walking/geojson");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Authorization", ORS_API_KEY);
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setRequestProperty("Accept", "application/json, application/geo+json");
                 conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
+                conn.setReadTimeout(15000);
+                conn.setDoOutput(true);
+                try (java.io.OutputStream os = conn.getOutputStream()) {
+                    os.write(body.toString().getBytes("UTF-8"));
+                }
 
-                List<GeoPoint> routePoints = new ArrayList<>();
                 if (conn.getResponseCode() == 200) {
                     BufferedReader reader = new BufferedReader(
                             new InputStreamReader(conn.getInputStream()));
@@ -519,39 +533,37 @@ public class MapFragment extends Fragment implements LocationListener {
                     reader.close();
 
                     JSONObject json = new JSONObject(sb.toString());
-                    if ("Ok".equals(json.optString("code", ""))) {
-                        JSONArray routes = json.getJSONArray("routes");
-                        if (routes.length() > 0) {
-                            JSONArray coordinates = routes.getJSONObject(0)
-                                    .getJSONObject("geometry").getJSONArray("coordinates");
-                            for (int i = 0; i < coordinates.length(); i++) {
-                                JSONArray c = coordinates.getJSONArray(i);
-                                routePoints.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
-                            }
+                    JSONArray features = json.optJSONArray("features");
+                    if (features != null && features.length() > 0) {
+                        JSONArray coordinates = features.getJSONObject(0)
+                                .getJSONObject("geometry").getJSONArray("coordinates");
+                        for (int i = 0; i < coordinates.length(); i++) {
+                            JSONArray c = coordinates.getJSONArray(i);
+                            routePoints.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
                         }
                     }
                 }
-
-                if (routePoints.isEmpty()) {
-                    for (PathStep s : validSteps) {
-                        routePoints.add(new GeoPoint(s.getLatitude(), s.getLongitude()));
-                    }
-                }
-
-                List<GeoPoint> finalPoints = routePoints;
-                mainHandler.post(() -> {
-                    if (!isAdded()) return;
-                    activeRoutePolyline = new Polyline(mapView);
-                    activeRoutePolyline.setPoints(finalPoints);
-                    activeRoutePolyline.getOutlinePaint().setColor(Color.parseColor("#5B5CF6"));
-                    activeRoutePolyline.getOutlinePaint().setStrokeWidth(10f);
-                    activeRoutePolyline.getOutlinePaint().setAntiAlias(true);
-                    mapView.getOverlayManager().add(0, activeRoutePolyline);
-                    mapView.invalidate();
-                });
             } catch (Exception e) {
-                Log.e("MapFragment", "Route fetch error", e);
+                Log.e("MapFragment", "ORS route fetch error", e);
             }
+
+            if (routePoints.isEmpty()) {
+                for (PathStep s : validSteps) {
+                    routePoints.add(new GeoPoint(s.getLatitude(), s.getLongitude()));
+                }
+            }
+
+            List<GeoPoint> finalPoints = routePoints;
+            mainHandler.post(() -> {
+                if (!isAdded()) return;
+                activeRoutePolyline = new Polyline(mapView);
+                activeRoutePolyline.setPoints(finalPoints);
+                activeRoutePolyline.getOutlinePaint().setColor(Color.parseColor("#5B5CF6"));
+                activeRoutePolyline.getOutlinePaint().setStrokeWidth(10f);
+                activeRoutePolyline.getOutlinePaint().setAntiAlias(true);
+                mapView.getOverlayManager().add(0, activeRoutePolyline);
+                mapView.invalidate();
+            });
         });
     }
 
@@ -714,8 +726,34 @@ public class MapFragment extends Fragment implements LocationListener {
                 tvDesc.setVisibility(View.VISIBLE);
             }
 
+            String imageUrl = step.getImageUrl();
             String b64 = step.getImageBase64();
-            if (b64 != null && !b64.isEmpty()) {
+            if (imageUrl != null && !imageUrl.isEmpty()) {
+                ImageView imgView = card.findViewById(R.id.img_step_photo);
+                View cardPhoto = card.findViewById(R.id.card_step_photo);
+                View tvNum = card.findViewById(R.id.tv_step_number);
+                String finalUrl = imageUrl;
+                executor.execute(() -> {
+                    try {
+                        URL u = new URL(finalUrl);
+                        HttpURLConnection c = (HttpURLConnection) u.openConnection();
+                        c.setRequestProperty("User-Agent", "TravelingApp/1.0");
+                        c.setConnectTimeout(8000);
+                        c.setReadTimeout(8000);
+                        if (c.getResponseCode() != 200) return;
+                        android.graphics.Bitmap bmp =
+                                android.graphics.BitmapFactory.decodeStream(c.getInputStream());
+                        c.getInputStream().close();
+                        if (bmp == null) return;
+                        mainHandler.post(() -> {
+                            if (!isAdded()) return;
+                            imgView.setImageBitmap(bmp);
+                            cardPhoto.setVisibility(View.VISIBLE);
+                            tvNum.setVisibility(View.GONE);
+                        });
+                    } catch (Exception ignored) {}
+                });
+            } else if (b64 != null && !b64.isEmpty()) {
                 Bitmap bmp = ImageUtils.base64ToBitmap(b64);
                 if (bmp != null) {
                     ((ImageView) card.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
