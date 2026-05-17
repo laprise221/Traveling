@@ -81,7 +81,22 @@
         <action
             android:id="@+id/action_profile_to_notifications"
             app:destination="@id/navigation_notifications" />
+        <action
+            android:id="@+id/action_profile_to_edit_profile"
+            app:destination="@id/navigation_edit_profile" />
     </fragment>
+
+    <fragment
+        android:id="@+id/navigation_edit_profile"
+        android:name="com.example.traveling.ui.profile.EditProfileFragment"
+        android:label="Modifier le profil"
+        tools:layout="@layout/fragment_edit_profile" />
+
+    <fragment
+        android:id="@+id/navigation_tag_selection"
+        android:name="com.example.traveling.ui.auth.TagSelectionFragment"
+        android:label="Centres d'intérêt"
+        tools:layout="@layout/fragment_tag_selection" />
 
     <fragment
         android:id="@+id/navigation_notifications"
@@ -154,6 +169,10 @@
         android:id="@+id/navigation_register"
         android:name="com.example.traveling.ui.auth.RegisterFragment"
         android:label="Inscription"
-        tools:layout="@layout/fragment_register" />
+        tools:layout="@layout/fragment_register">
+        <action
+            android:id="@+id/action_register_to_tag_selection"
+            app:destination="@id/navigation_tag_selection" />
+    </fragment>
 
 </navigation>

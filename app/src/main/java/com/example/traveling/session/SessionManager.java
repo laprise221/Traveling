@@ -1,13 +1,13 @@
 package com.example.traveling.session;
 
-import com.google.firebase.auth.FirebaseAuth;
+import android.util.Log;
 
-/**
- * Gère l'état de session de l'utilisateur.
- * S'appuie sur Firebase Auth : si aucun utilisateur n'est connecté,
- * on considère l'utilisateur comme anonyme.
- */
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
 public final class SessionManager {
+
+    private static final String TAG = "SessionManager";
 
     private static final SessionManager INSTANCE = new SessionManager();
 
@@ -17,7 +17,31 @@ public final class SessionManager {
         return INSTANCE;
     }
 
+    /** True si l'utilisateur n'a pas de vrai compte (pas connecté ou session Firebase anonyme). */
     public boolean isAnonymous() {
-        return FirebaseAuth.getInstance().getCurrentUser() == null;
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        return user == null || user.isAnonymous();
+    }
+
+    /** Alias de isAnonymous() pour la lisibilité. */
+    public boolean isGuest() {
+        return isAnonymous();
+    }
+
+    /** Garantit qu'une session Firebase existe. Se connecte anonymement si besoin, puis appelle onReady. */
+    public void ensureFirebaseSession(Runnable onReady) {
+        if (FirebaseAuth.getInstance().getCurrentUser() != null) {
+            onReady.run();
+            return;
+        }
+        FirebaseAuth.getInstance().signInAnonymously()
+                .addOnSuccessListener(result -> {
+                    Log.d(TAG, "signInAnonymously SUCCESS uid=" + result.getUser().getUid());
+                    onReady.run();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "signInAnonymously FAILED: " + e.getMessage(), e);
+                    onReady.run();
+                });
     }
 }

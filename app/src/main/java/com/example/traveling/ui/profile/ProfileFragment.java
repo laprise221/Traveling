@@ -16,7 +16,6 @@ import com.example.traveling.data.FirestoreRepository;
 import com.example.traveling.data.GroupRepository;
 import com.example.traveling.data.NotificationRepository;
 import com.example.traveling.session.SessionManager;
-import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -69,6 +68,12 @@ public class ProfileFragment extends Fragment {
                     Navigation.findNavController(v).navigate(R.id.action_profile_to_notifications));
         }
 
+        MaterialButton btnEditProfile = view.findViewById(R.id.btn_edit_profile);
+        if (btnEditProfile != null) {
+            btnEditProfile.setOnClickListener(v ->
+                    Navigation.findNavController(v).navigate(R.id.action_profile_to_edit_profile));
+        }
+
         view.findViewById(R.id.btn_logout).setOnClickListener(v -> {
             FirebaseAuth.getInstance().signOut();
             updateUI();
@@ -79,27 +84,13 @@ public class ProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateUI();
-        updateNotificationBadge();
+        updateNotificationButton();
     }
 
-    private void updateNotificationBadge() {
-        if (SessionManager.get().isAnonymous()) return;
+    private void updateNotificationButton() {
+        if (SessionManager.get().isGuest()) return;
         NotificationRepository.get().getUnreadCount(count -> {
-            if (!isAdded() || getActivity() == null) return;
-
-            // Badge on bottom nav Profile icon
-            BottomNavigationView nav = getActivity().findViewById(R.id.bottom_navigation);
-            if (nav != null) {
-                if (count > 0) {
-                    BadgeDrawable badge = nav.getOrCreateBadge(R.id.navigation_profile);
-                    badge.setVisible(true);
-                    badge.setNumber(count);
-                } else {
-                    nav.removeBadge(R.id.navigation_profile);
-                }
-            }
-
-            // Counter next to the Notifications button
+            if (!isAdded()) return;
             MaterialButton btnNotifications = getView() != null
                     ? getView().findViewById(R.id.btn_notifications) : null;
             if (btnNotifications != null) {
@@ -113,8 +104,9 @@ public class ProfileFragment extends Fragment {
 
     private void updateUI() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        boolean isRealUser = user != null && !user.isAnonymous();
 
-        if (user != null) {
+        if (isRealUser) {
             layoutConnected.setVisibility(View.VISIBLE);
             layoutAnonymous.setVisibility(View.GONE);
 

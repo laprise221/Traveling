@@ -42,8 +42,11 @@ import com.example.traveling.data.PathRepository;
 import com.example.traveling.data.UserRepository;
 import com.example.traveling.model.PathStep;
 import com.example.traveling.model.TravelPath;
+import com.example.traveling.data.FirestoreRepository;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
@@ -722,21 +725,22 @@ public class CreatePathFragment extends Fragment {
         btnPublish.setEnabled(false);
 
         TravelPath finalPath = path;
+        List<String> selectedActivities = getSelectedActivities();
         GeocodingUtils.geocode(city, new GeocodingUtils.GeocodingCallback() {
             @Override
             public void onResult(double latitude, double longitude) {
                 finalPath.setStartLatitude(latitude);
                 finalPath.setStartLongitude(longitude);
-                savePath(finalPath, btnPublish, scheduledDate);
+                savePath(finalPath, btnPublish, scheduledDate, selectedActivities);
             }
             @Override
             public void onFailure() {
-                savePath(finalPath, btnPublish, scheduledDate);
+                savePath(finalPath, btnPublish, scheduledDate, selectedActivities);
             }
         });
     }
 
-    private void savePath(TravelPath path, View btnPublish, java.util.Date scheduledDate) {
+    private void savePath(TravelPath path, View btnPublish, java.util.Date scheduledDate, List<String> activities) {
         Log.d("CreatePath", "Saving path to Firestore...");
         PathRepository.get().savePath(path)
                 .addOnSuccessListener(docRef -> {
@@ -744,6 +748,17 @@ public class CreatePathFragment extends Fragment {
                     if (!isAdded()) return;
                     path.setId(docRef.getId());
                     UserRepository.get().addPath(path);
+                    // Notify users following selected activity tags (only for immediate publications)
+                    if (scheduledDate == null && activities != null) {
+                        FirebaseUser me = FirebaseAuth.getInstance().getCurrentUser();
+                        String publisherName = me != null && me.getDisplayName() != null ? me.getDisplayName() : "Quelqu'un";
+                        String publisherId = me != null ? me.getUid() : "";
+                        for (String activity : activities) {
+                            FirestoreRepository.get().notifyTagFollowers(
+                                    activity, publisherId, publisherName,
+                                    docRef.getId(), "path", path.getTitle());
+                        }
+                    }
                     String msg;
                     if (scheduledDate != null) {
                         SchedulePublishHelper.schedule(requireContext(), docRef.getId(),

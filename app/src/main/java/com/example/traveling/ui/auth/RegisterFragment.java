@@ -12,7 +12,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 
 import com.example.traveling.R;
@@ -109,11 +108,9 @@ public class RegisterFragment extends Fragment {
                                     String uid = task.getResult().getUser().getUid();
                                     FirestoreRepository.get().saveUser(uid, username, email);
 
-                                    NavController nav = Navigation.findNavController(requireView());
-                                    if (!nav.popBackStack(R.id.navigation_profile, false)) {
-                                        nav.navigateUp();
-                                        nav.navigateUp();
-                                    }
+                                    // Navigate to tag selection
+                                    Navigation.findNavController(requireView())
+                                            .navigate(R.id.action_register_to_tag_selection);
                                 });
                     } else {
                         progressBar.setVisibility(View.GONE);

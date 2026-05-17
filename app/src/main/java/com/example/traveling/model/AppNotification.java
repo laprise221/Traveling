@@ -53,6 +53,7 @@ public class AppNotification {
             case "comment":  return name + " a commenté" + title + (message != null && !message.isEmpty() ? " : " + message : "");
             case "favorite": return name + " a mis en favori votre publication" + title;
             case "group_post": return name + " a partagé un message dans " + title;
+            case "tag_follow": return "Nouvelle publication dans la catégorie \"" + (message != null && !message.isEmpty() ? message : contentTitle) + "\"";
             default:         return name + " a interagi avec votre contenu";
         }
     }

@@ -15,8 +15,11 @@ import androidx.navigation.ui.NavigationUI;
 import com.example.traveling.data.NotificationRepository;
 import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.firebase.auth.FirebaseAuth;
 
 public class MainActivity extends AppCompatActivity {
+
+    private FirebaseAuth.AuthStateListener authStateListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,7 +52,13 @@ public class MainActivity extends AppCompatActivity {
             return true;
         });
 
-        refreshNotificationBadge();
+        // Refresh badge whenever the user navigates between tabs
+        navController.addOnDestinationChangedListener((ctrl, destination, args) ->
+                refreshNotificationBadge());
+
+        // Refresh badge as soon as Firebase auth is ready (handles cold-start delay)
+        authStateListener = auth -> refreshNotificationBadge();
+        FirebaseAuth.getInstance().addAuthStateListener(authStateListener);
     }
 
     @Override
@@ -58,7 +67,14 @@ public class MainActivity extends AppCompatActivity {
         refreshNotificationBadge();
     }
 
-    private void refreshNotificationBadge() {
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (authStateListener != null)
+            FirebaseAuth.getInstance().removeAuthStateListener(authStateListener);
+    }
+
+    public void refreshNotificationBadge() {
         NotificationRepository.get().getUnreadCount(count -> {
             BottomNavigationView nav = findViewById(R.id.bottom_navigation);
             if (nav == null) return;
