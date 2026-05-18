@@ -161,6 +161,18 @@ public class PathDetailFragment extends Fragment {
         ((TextView) stepView.findViewById(R.id.tv_step_name)).setText(step.getName());
         stepView.findViewById(R.id.btn_remove_step).setVisibility(View.GONE);
 
+        String ts = step.getTimeSlot();
+        if (ts != null && !ts.isEmpty()) {
+            TextView tvTime = stepView.findViewById(R.id.tv_step_time);
+            if (tvTime != null) {
+                tvTime.setText(ts);
+                tvTime.setVisibility(View.VISIBLE);
+                if (ts.contains("⚠")) {
+                    tvTime.setTextColor(android.graphics.Color.parseColor("#EF4444"));
+                }
+            }
+        }
+
         String desc = step.getDescription();
         if (desc != null && !desc.isEmpty()) {
             TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);

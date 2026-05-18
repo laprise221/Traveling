@@ -607,6 +607,15 @@ public class CreatePathFragment extends Fragment {
         tvStepNumber.setText(String.valueOf(index));
         tvStepName.setText(step.getName());
 
+        String ts = step.getTimeSlot();
+        if (ts != null && !ts.isEmpty()) {
+            TextView tvTime = stepView.findViewById(R.id.tv_step_time);
+            if (tvTime != null) {
+                tvTime.setText(ts);
+                tvTime.setVisibility(View.VISIBLE);
+            }
+        }
+
         String desc = step.getDescription();
         if (desc != null && !desc.isEmpty()) {
             TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
@@ -1134,21 +1143,30 @@ public class CreatePathFragment extends Fragment {
             picked.remove(picked.size() - 1);
         }
 
-        // Compute final metrics from the TSP-ordered, trimmed path
+        // Compute final metrics + assign suggested visit times (start at 09:00)
         double totalKm = 0;
         int estBudget = 0;
         int estDuration = 0;
+        int suggestedMin = 9 * 60;
         for (int i = 0; i < picked.size(); i++) {
             PathStep s = picked.get(i);
             estBudget += admissionCosts.getOrDefault(s, 0) + overheadPerStep;
-            estDuration += visitDurations.getOrDefault(s, 20);
+            int visitMin = visitDurations.getOrDefault(s, 20);
+            estDuration += visitMin;
             if (i > 0) {
                 double legKm = distanceKm(
                         picked.get(i - 1).getLatitude(), picked.get(i - 1).getLongitude(),
                         s.getLatitude(), s.getLongitude());
                 totalKm += legKm;
-                estDuration += (int) (legKm * 12);
+                int walkMin = (int) Math.ceil(legKm * 12);
+                estDuration += walkMin;
+                suggestedMin += walkMin;
             }
+            s.setTimeSlot(formatSuggestedTime(suggestedMin));
+            s.setDuration(visitMin < 60 ? visitMin + " min"
+                    : (visitMin / 60) + "h"
+                    + (visitMin % 60 > 0 ? String.format("%02d", visitMin % 60) : ""));
+            suggestedMin += visitMin;
         }
 
         return new PathOption(name, picked, totalKm, estBudget, estDuration);
@@ -1476,9 +1494,23 @@ public class CreatePathFragment extends Fragment {
                     Log.d("CreatePath", "Enriched " + step.getName()
                             + " → desc=" + !desc.isEmpty() + " img=" + (imageUrl != null));
 
-                    // 3. Prix réel depuis Overpass (tags OSM fee/charge)
-                    String priceInfo = fetchPriceFromOverpass(
+                    // 3. Prix + horaires d'ouverture depuis Overpass (requête combinée)
+                    String[] overpassInfo = fetchOverpassInfo(
                             step.getLatitude(), step.getLongitude());
+                    String priceInfo    = overpassInfo[0];
+                    String openingHours = overpassInfo[1];
+
+                    // 4. Vérifier si le lieu est ouvert au créneau suggéré
+                    String currentSlot = step.getTimeSlot();
+                    int sugMin = parseSuggestedTimeToMin(currentSlot);
+                    final boolean closedWarning = openingHours != null
+                            && !openingHours.isEmpty()
+                            && currentSlot != null
+                            && sugMin >= 0
+                            && !isOpenAt(openingHours, sugMin);
+                    String finalSlot = closedWarning
+                            ? currentSlot + " ⚠ Vérifie les horaires"
+                            : currentSlot;
 
                     Bitmap bmp = (imageUrl != null) ? downloadBitmap(imageUrl) : null;
                     String finalDesc = priceInfo != null
@@ -1489,18 +1521,27 @@ public class CreatePathFragment extends Fragment {
                     mainHandler.post(() -> {
                         if (!isAdded()) return;
                         if (!finalDesc.isEmpty()) step.setDescription(finalDesc);
-                        // Store URL (not base64) to keep Firestore document small
                         if (finalImageUrl != null) step.setImageUrl(finalImageUrl);
+                        if (finalSlot != null) step.setTimeSlot(finalSlot);
                         View stepView = stepIndex < stepsContainer.getChildCount()
                                 ? stepsContainer.getChildAt(stepIndex) : null;
                         if (stepView != null) {
-                            // Show description
                             if (!finalDesc.isEmpty()) {
                                 TextView tvDesc = stepView.findViewById(R.id.tv_step_desc);
                                 tvDesc.setText(finalDesc);
                                 tvDesc.setVisibility(View.VISIBLE);
                             }
-                            // Show downloaded bitmap directly in creation view
+                            if (finalSlot != null) {
+                                TextView tvTime = stepView.findViewById(R.id.tv_step_time);
+                                if (tvTime != null) {
+                                    tvTime.setText(finalSlot);
+                                    tvTime.setVisibility(View.VISIBLE);
+                                    if (closedWarning) {
+                                        tvTime.setTextColor(
+                                            android.graphics.Color.parseColor("#EF4444"));
+                                    }
+                                }
+                            }
                             if (bmp != null) {
                                 ((ImageView) stepView.findViewById(R.id.img_step_photo))
                                         .setImageBitmap(bmp);
@@ -1533,6 +1574,94 @@ public class CreatePathFragment extends Fragment {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String formatSuggestedTime(int minutes) {
+        int h = (minutes / 60) % 24;
+        int m = minutes % 60;
+        String slot = h < 12 ? "Matin" : h < 14 ? "Midi" : h < 18 ? "Après-midi" : "Soir";
+        return String.format("%02d:%02d · %s", h, m, slot);
+    }
+
+    private int parseSuggestedTimeToMin(String timeSlot) {
+        if (timeSlot == null) return -1;
+        Matcher m = Pattern.compile("(\\d{1,2}):(\\d{2})").matcher(timeSlot);
+        if (m.find()) return Integer.parseInt(m.group(1)) * 60 + Integer.parseInt(m.group(2));
+        return -1;
+    }
+
+    private boolean isOpenAt(String openingHours, int timeMinutes) {
+        if (openingHours == null || openingHours.isEmpty()) return true;
+        if (openingHours.toLowerCase().contains("24/7")) return true;
+        Pattern p = Pattern.compile("(\\d{1,2}):(\\d{2})\\s*[-–]\\s*(\\d{1,2}):(\\d{2})");
+        Matcher m = p.matcher(openingHours);
+        boolean foundAnyRange = false;
+        while (m.find()) {
+            foundAnyRange = true;
+            int open  = Integer.parseInt(m.group(1)) * 60 + Integer.parseInt(m.group(2));
+            int close = Integer.parseInt(m.group(3)) * 60 + Integer.parseInt(m.group(4));
+            if (timeMinutes >= open && timeMinutes < close) return true;
+        }
+        return !foundAnyRange; // no range found → données insuffisantes, on ne prévient pas
+    }
+
+    /** Récupère prix (fee/charge) ET horaires d'ouverture en une seule requête Overpass. */
+    private String[] fetchOverpassInfo(double lat, double lon) {
+        String[] result = {null, null}; // [priceText, openingHours]
+        if (lat == 0 && lon == 0) return result;
+        try {
+            String query = "[out:json][timeout:10];"
+                    + "(node(around:150," + lat + "," + lon + ")[\"fee\"];"
+                    + "node(around:150," + lat + "," + lon + ")[\"opening_hours\"];"
+                    + "way(around:150," + lat + "," + lon + ")[\"fee\"];"
+                    + "way(around:150," + lat + "," + lon + ")[\"opening_hours\"];);"
+                    + "out tags;";
+            URL url = new URL("https://overpass-api.de/api/interpreter?data="
+                    + URLEncoder.encode(query, "UTF-8"));
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            if (conn.getResponseCode() != 200) return result;
+
+            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = r.readLine()) != null) sb.append(l);
+            r.close();
+
+            JSONArray elements = new JSONObject(sb.toString()).optJSONArray("elements");
+            if (elements == null) return result;
+
+            for (int i = 0; i < elements.length(); i++) {
+                JSONObject tags = elements.getJSONObject(i).optJSONObject("tags");
+                if (tags == null) continue;
+
+                if (result[0] == null) {
+                    String fee = tags.optString("fee", "");
+                    if (!fee.isEmpty()) {
+                        if ("no".equals(fee)) {
+                            result[0] = "Entrée gratuite";
+                        } else {
+                            String charge = tags.optString("charge", "");
+                            result[0] = !charge.isEmpty()
+                                    ? "Entrée : " + simplifyCharge(charge)
+                                    : "Entrée payante";
+                        }
+                    }
+                }
+
+                if (result[1] == null) {
+                    String oh = tags.optString("opening_hours", "");
+                    if (!oh.isEmpty()) result[1] = oh;
+                }
+
+                if (result[0] != null && result[1] != null) break;
+            }
+        } catch (Exception e) {
+            Log.d("CreatePath", "Overpass info fetch failed: " + e.getMessage());
+        }
+        return result;
     }
 
     private String fetchPriceFromOverpass(double lat, double lon) {
