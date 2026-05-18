@@ -99,7 +99,8 @@ public class CreatePathFragment extends Fragment {
     private PathOption selectedOption;
 
     private final List<PathStep> steps = new ArrayList<>();
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();   // génération du parcours
+    private final ExecutorService enrichExecutor = Executors.newFixedThreadPool(4); // enrichissement en parallèle
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private ArrayAdapter<String> cityAdapter;
     private Runnable pendingSearch;
@@ -832,6 +833,7 @@ public class CreatePathFragment extends Fragment {
             mainHandler.removeCallbacks(pendingSearch);
         }
         executor.shutdownNow();
+        enrichExecutor.shutdownNow();
     }
 
     private List<JSONObject> filterPOIs(JSONArray poiResults,
@@ -1441,7 +1443,7 @@ public class CreatePathFragment extends Fragment {
         for (int i = 0; i < steps.size(); i++) {
             PathStep step = steps.get(i);
             int stepIndex = i;
-            executor.execute(() -> {
+            enrichExecutor.execute(() -> {
                 try {
                     String desc = "";
                     String imageUrl = null;
@@ -1656,8 +1658,8 @@ public class CreatePathFragment extends Fragment {
                     + URLEncoder.encode(query, "UTF-8"));
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(4000);
             if (conn.getResponseCode() != 200) return result;
 
             BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));

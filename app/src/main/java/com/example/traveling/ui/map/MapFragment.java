@@ -417,10 +417,9 @@ public class MapFragment extends Fragment implements LocationListener {
             Marker marker = new Marker(mapView);
             marker.setPosition(pt);
             marker.setTitle((i + 1) + ". " + s.getName());
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-            Drawable icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_marker_path);
-            if (icon != null) marker.setIcon(icon);
-            mapView.getOverlays().add(marker);
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+            marker.setIcon(createNumberedMarkerDrawable(i + 1));
+            mapView.getOverlays().add(marker); // ajouté à la fin = au-dessus des polylines
             activePathMarkers.add(marker);
             stepMarkersByIndex.put(i, marker);
         }
@@ -707,6 +706,10 @@ public class MapFragment extends Fragment implements LocationListener {
                 mapView.getOverlays().remove(activeRoutePolyline);
                 activeRoutePolyline = null;
             }
+            if (liveSegmentPolyline != null) {
+                mapView.getOverlays().remove(liveSegmentPolyline);
+                liveSegmentPolyline = null;
+            }
             if (newIdx == idx) {
                 navStepLabel.setText("Parcours terminé !");
                 navNextStep.setText("Bravo 🎉");
@@ -876,10 +879,38 @@ public class MapFragment extends Fragment implements LocationListener {
                 liveSegmentPolyline.getOutlinePaint().setColor(Color.parseColor("#FF6B35"));
                 liveSegmentPolyline.getOutlinePaint().setStrokeWidth(12f);
                 liveSegmentPolyline.getOutlinePaint().setAntiAlias(true);
-                mapView.getOverlayManager().add(liveSegmentPolyline);
+                mapView.getOverlayManager().add(0, liveSegmentPolyline); // sous les marqueurs
                 mapView.invalidate();
             });
         });
+    }
+
+    private Drawable createNumberedMarkerDrawable(int number) {
+        float density = getResources().getDisplayMetrics().density;
+        int size = Math.round(44 * density);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+
+        android.graphics.Paint bgPaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        bgPaint.setColor(Color.parseColor("#5B5CF6"));
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f - density, bgPaint);
+
+        android.graphics.Paint borderPaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        borderPaint.setColor(Color.WHITE);
+        borderPaint.setStyle(android.graphics.Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(2.5f * density);
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f - density, borderPaint);
+
+        android.graphics.Paint textPaint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        textPaint.setColor(Color.WHITE);
+        textPaint.setTextSize(17 * density);
+        textPaint.setTextAlign(android.graphics.Paint.Align.CENTER);
+        textPaint.setTypeface(android.graphics.Typeface.create(
+                android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD));
+        float textY = size / 2f - (textPaint.descent() + textPaint.ascent()) / 2f;
+        canvas.drawText(String.valueOf(number), size / 2f, textY, textPaint);
+
+        return new android.graphics.drawable.BitmapDrawable(getResources(), bitmap);
     }
 
     private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
