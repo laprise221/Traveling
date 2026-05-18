@@ -609,6 +609,13 @@ public class PathDetailFragment extends Fragment {
                     routePoints.add(new GeoPoint(coord.getDouble(1), coord.getDouble(0)));
                 }
 
+                // Cache the route so MapFragment can reuse it without a second ORS request
+                List<double[]> routeCache = new ArrayList<>();
+                for (GeoPoint p : routePoints) {
+                    routeCache.add(new double[]{p.getLatitude(), p.getLongitude()});
+                }
+                com.example.traveling.data.ActivePathRegistry.cacheRoute(routeCache);
+
                 mainHandler.post(() -> {
                     if (!isAdded()) return;
                     Polyline polyline = new Polyline(mapView);

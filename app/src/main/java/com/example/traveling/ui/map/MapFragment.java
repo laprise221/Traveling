@@ -495,6 +495,22 @@ public class MapFragment extends Fragment implements LocationListener {
         }
         if (validSteps.size() < 2) return;
 
+        // Reuse route already fetched by PathDetailFragment — avoids a duplicate ORS request
+        // (which can fail due to rate-limiting when called immediately after the preview).
+        List<double[]> cached = com.example.traveling.data.ActivePathRegistry.getCachedRoute();
+        if (cached != null && !cached.isEmpty()) {
+            List<GeoPoint> pts = new ArrayList<>();
+            for (double[] p : cached) pts.add(new GeoPoint(p[0], p[1]));
+            activeRoutePolyline = new Polyline(mapView);
+            activeRoutePolyline.setPoints(pts);
+            activeRoutePolyline.getOutlinePaint().setColor(Color.parseColor("#5B5CF6"));
+            activeRoutePolyline.getOutlinePaint().setStrokeWidth(10f);
+            activeRoutePolyline.getOutlinePaint().setAntiAlias(true);
+            mapView.getOverlayManager().add(0, activeRoutePolyline);
+            mapView.invalidate();
+            return;
+        }
+
         executor.execute(() -> {
             List<GeoPoint> routePoints = new ArrayList<>();
             try {
