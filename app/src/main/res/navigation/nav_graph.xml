@@ -147,7 +147,11 @@
         android:id="@+id/navigation_group_detail"
         android:name="com.example.traveling.ui.groups.GroupDetailFragment"
         android:label="Discussion groupe"
-        tools:layout="@layout/fragment_group_detail" />
+        tools:layout="@layout/fragment_group_detail">
+        <action
+            android:id="@+id/action_group_detail_to_photo_detail"
+            app:destination="@id/navigation_photo_detail" />
+    </fragment>
 
     <fragment
         android:id="@+id/navigation_path_detail"

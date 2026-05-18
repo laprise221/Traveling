@@ -30,7 +30,6 @@ import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
-import com.google.firebase.firestore.FieldPath;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QuerySnapshot;
 
@@ -88,7 +87,7 @@ public class GroupDetailFragment extends Fragment {
 
         adapter = new PostAdapter(myId, photo -> {
             PhotoRegistry.set(photo);
-            Navigation.findNavController(requireView()).navigate(R.id.navigation_photo_detail);
+            Navigation.findNavController(requireView()).navigate(R.id.action_group_detail_to_photo_detail);
         });
         recycler.setAdapter(adapter);
 
@@ -171,24 +170,25 @@ public class GroupDetailFragment extends Fragment {
                 return;
             }
 
-            // Batch query : max 10 par requête (limite Firestore whereIn)
+            // Fetch each photo individually so a permission failure on one
+            // does not block the others (whereIn queries are all-or-nothing in Firestore).
             FirebaseFirestore db = FirebaseFirestore.getInstance();
-            List<com.google.android.gms.tasks.Task<QuerySnapshot>> tasks = new ArrayList<>();
-            for (int i = 0; i < photoIds.size(); i += 10) {
-                List<String> batch = photoIds.subList(i, Math.min(i + 10, photoIds.size()));
-                tasks.add(db.collection("photos")
-                        .whereIn(FieldPath.documentId(), batch)
-                        .get());
+            List<com.google.android.gms.tasks.Task<DocumentSnapshot>> tasks = new ArrayList<>();
+            for (String id : photoIds) {
+                tasks.add(db.collection("photos").document(id).get());
             }
 
-            Tasks.whenAllSuccess(tasks).addOnSuccessListener(results -> {
+            Tasks.whenAllComplete(tasks).addOnSuccessListener(completedTasks -> {
                 Map<String, Photo> photoMap = new HashMap<>();
-                for (Object result : results) {
-                    for (DocumentSnapshot doc : (QuerySnapshot) result) {
-                        Photo p = doc.toObject(Photo.class);
-                        if (p != null) {
-                            p.setId(doc.getId());
-                            photoMap.put(doc.getId(), p);
+                for (com.google.android.gms.tasks.Task<?> task : completedTasks) {
+                    if (task.isSuccessful()) {
+                        DocumentSnapshot doc = (DocumentSnapshot) task.getResult();
+                        if (doc != null && doc.exists()) {
+                            Photo p = doc.toObject(Photo.class);
+                            if (p != null) {
+                                p.setId(doc.getId());
+                                photoMap.put(doc.getId(), p);
+                            }
                         }
                     }
                 }
@@ -202,8 +202,6 @@ public class GroupDetailFragment extends Fragment {
                         }
                     }
                 }
-                if (isAdded()) showPosts(posts);
-            }).addOnFailureListener(e -> {
                 if (isAdded()) showPosts(posts);
             });
         });

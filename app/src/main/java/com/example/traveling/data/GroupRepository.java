@@ -179,7 +179,14 @@ public class GroupRepository {
 
         db.collection("groups").document(groupId)
                 .collection("posts").add(data)
-                .addOnSuccessListener(ref -> { if (callback != null) callback.onSuccess(ref.getId()); })
+                .addOnSuccessListener(ref -> {
+                    if (photoId != null && !photoId.isEmpty()) {
+                        Map<String, Object> photoUpdate = new HashMap<>();
+                        photoUpdate.put("sharedToGroup", true);
+                        db.collection("photos").document(photoId).update(photoUpdate);
+                    }
+                    if (callback != null) callback.onSuccess(ref.getId());
+                })
                 .addOnFailureListener(e -> Log.e(TAG, "Error adding post", e));
     }
 
