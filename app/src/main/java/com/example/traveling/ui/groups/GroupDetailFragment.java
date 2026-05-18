@@ -197,7 +197,8 @@ public class GroupDetailFragment extends Fragment {
                         Photo p = photoMap.get(item.photoId);
                         if (p != null) {
                             item.photo = p;
-                            item.imageBase64 = p.getImageBase64();
+                            List<String> images = p.getImages();
+                            item.imageBase64 = images.isEmpty() ? null : images.get(0);
                         }
                     }
                 }
