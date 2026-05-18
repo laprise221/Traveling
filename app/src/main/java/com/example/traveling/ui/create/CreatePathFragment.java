@@ -459,18 +459,29 @@ public class CreatePathFragment extends Fragment {
                 double maxRouteKm = maxWalkKm(effort, dureeMax);
                 int totalTimeMin = dureeMax * 60;
                 List<PathOption> generatedOptions = new ArrayList<>();
-                generatedOptions.add(buildOption(
+                PathOption optEco = buildOption(
                         "Économique", filteredPOIs,
-                        Math.max(2, maxSteps - 1), true, 3,
-                        maxRouteKm, budget, totalTimeMin, activites));
-                generatedOptions.add(buildOption(
+                        Math.max(2, maxSteps - 1), "cheap", 3,
+                        maxRouteKm, budget, totalTimeMin, activites,
+                        new java.util.HashSet<>());
+                generatedOptions.add(optEco);
+
+                java.util.Set<String> usedOpt1 = new java.util.HashSet<>();
+                for (PathStep s : optEco.steps) usedOpt1.add(s.getName());
+
+                PathOption optBal = buildOption(
                         "Équilibré", filteredPOIs,
-                        maxSteps, false, 5,
-                        maxRouteKm, budget, totalTimeMin, activites));
+                        maxSteps, "balanced", 5,
+                        maxRouteKm, budget, totalTimeMin, activites, usedOpt1);
+                generatedOptions.add(optBal);
+
+                java.util.Set<String> usedOpt2 = new java.util.HashSet<>(usedOpt1);
+                for (PathStep s : optBal.steps) usedOpt2.add(s.getName());
+
                 generatedOptions.add(buildOption(
                         "Confort", filteredPOIs,
-                        maxSteps + 1, false, 10,
-                        maxRouteKm, (int) (budget * 1.3), totalTimeMin, activites));
+                        maxSteps + 1, "premium", 10,
+                        maxRouteKm, (int) (budget * 1.3), totalTimeMin, activites, usedOpt2));
 
                 // ---- ÉTAPE 6 : Construire le résumé ----
                 String meteoInfo;
@@ -847,6 +858,15 @@ public class CreatePathFragment extends Fragment {
 
             String kinds = poi.optString("kinds", "");
 
+            // Exclure hébergements (hôtels, auberges, etc.) — par kind ET par nom
+            if (kinds.contains("accomodations") || kinds.contains("hotels")
+                    || kinds.contains("hostels") || kinds.contains("guest_houses")) continue;
+            String nameLower = poi.optString("name", "").toLowerCase();
+            if (nameLower.contains("hotel") || nameLower.contains("hôtel")
+                    || nameLower.contains("hostel") || nameLower.contains("motel")
+                    || nameLower.contains("auberge") || nameLower.contains("gîte")
+                    || nameLower.contains("résidence") || nameLower.contains("apparthotel")) continue;
+
             if (sensiblePluie && ilPleut) {
                 boolean estCouvert = kinds.contains("museums")
                         || kinds.contains("theatres")
@@ -1019,12 +1039,15 @@ public class CreatePathFragment extends Fragment {
      * Score = rate×5 (qualité OTM) + activityMatch×20 (pertinence activités) − walkKm×2 (compacité)
      */
     private PathOption buildOption(String name, List<JSONObject> pool, int maxSteps,
-                                   boolean excludeExpensive, int overheadPerStep,
+                                   String mode, int overheadPerStep,
                                    double maxRouteKm, int totalBudget, int totalTimeMin,
-                                   List<String> selectedActivities) throws JSONException {
+                                   List<String> selectedActivities,
+                                   java.util.Set<String> alreadyUsed) throws JSONException {
         List<JSONObject> candidates = new ArrayList<>();
         for (JSONObject poi : pool) {
-            if (excludeExpensive && estimatePOICost(poi) >= 10) continue;
+            int poiCostFilter = estimatePOICost(poi);
+            if ("cheap".equals(mode) && poiCostFilter >= 10) continue;
+            if ("premium".equals(mode) && poi.optInt("rate", 0) < 1) continue;
             candidates.add(poi);
         }
 
@@ -1086,6 +1109,7 @@ public class CreatePathFragment extends Fragment {
                 // Score: popularity + activity relevance + geographic spread
                 int rate = poi.optInt("rate", 0);
                 int activityMatch = activityMatchScore(poi, selectedActivities);
+                int poiCost = estimatePOICost(poi);
 
                 double spreadScore;
                 if (picked.isEmpty()) {
@@ -1098,7 +1122,19 @@ public class CreatePathFragment extends Fragment {
                     spreadScore = 5 - (walkKm - targetLegKm * 1.5) * 6; // penalise long detours
                 }
 
-                double score = rate * 20.0 + activityMatch * 12.0 + spreadScore;
+                double score;
+                if ("cheap".equals(mode)) {
+                    // Maximise qualité, pénalise fortement le coût → monuments, parcs, sites gratuits
+                    score = rate * 15.0 - poiCost * 8.0 + activityMatch * 10.0 + spreadScore;
+                } else if ("premium".equals(mode)) {
+                    // Préfère les lieux payants de qualité → musées, restaurants, spectacles
+                    score = rate * 25.0 + activityMatch * 15.0 + (poiCost > 0 ? 12.0 : 0.0) + spreadScore;
+                } else {
+                    // Équilibré : pondération neutre
+                    score = rate * 20.0 + activityMatch * 12.0 + spreadScore;
+                }
+                // Décourager fortement la réutilisation des POIs déjà choisis dans les autres options
+                if (alreadyUsed.contains(poi.optString("name", ""))) score -= 60.0;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -1742,19 +1778,20 @@ public class CreatePathFragment extends Fragment {
                     kinds.add("shops");
                     break;
                 case "découverte":
-                    kinds.add("tourist_facilities");
                     kinds.add("monuments_and_memorials");
                     kinds.add("view_points");
                     kinds.add("historic");
+                    kinds.add("interesting_places");
                     break;
             }
         }
 
         if (kinds.isEmpty()) {
-            kinds.add("tourist_facilities");
             kinds.add("monuments_and_memorials");
             kinds.add("historic");
             kinds.add("cultural");
+            kinds.add("interesting_places");
+            kinds.add("view_points");
         }
         return TextUtils.join(",", kinds);
     }

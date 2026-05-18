@@ -217,25 +217,29 @@ public class PathDetailFragment extends Fragment {
             PathStep step = steps.get(i);
             if ((step.getImageUrl() != null && !step.getImageUrl().isEmpty())
                     || (step.getImageBase64() != null && !step.getImageBase64().isEmpty())) {
-                continue; // image déjà disponible
+                // imageUrl connue : tenter quand même le téléchargement pour vérifier
+                int idx = i;
+                executor.execute(() -> {
+                    Bitmap bmp = downloadBitmap(step.getImageUrl());
+                    if (bmp != null) {
+                        mainHandler.post(() -> {
+                            if (!isAdded() || idx >= stepViewList.size()) return;
+                            View sv = stepViewList.get(idx);
+                            ((ImageView) sv.findViewById(R.id.img_step_photo)).setImageBitmap(bmp);
+                            sv.findViewById(R.id.card_step_photo).setVisibility(View.VISIBLE);
+                            sv.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
+                        });
+                    }
+                });
+                continue;
             }
             int idx = i;
             executor.execute(() -> {
-                // 1. OpenTripMap par coordonnées (meilleure couverture POI touristique)
-                String url = null;
-                if (step.getLatitude() != 0 || step.getLongitude() != 0) {
-                    url = fetchImageUrlFromOTM(step.getLatitude(), step.getLongitude());
-                }
-                // 2. Wikipedia par nom (fallback)
-                if (url == null) {
-                    url = fetchImageUrlFromWikipedia(step.getName());
-                }
+                String url = resolveImageUrl(step);
                 if (url == null) return;
-
-                step.setImageUrl(url); // mémorisé pour le bottom sheet
+                step.setImageUrl(url);
                 Bitmap bmp = downloadBitmap(url);
                 if (bmp == null) return;
-
                 mainHandler.post(() -> {
                     if (!isAdded() || idx >= stepViewList.size()) return;
                     View sv = stepViewList.get(idx);
@@ -244,6 +248,56 @@ public class PathDetailFragment extends Fragment {
                     sv.findViewById(R.id.tv_step_number).setVisibility(View.GONE);
                 });
             });
+        }
+    }
+
+    /** Cherche une URL d'image pour l'étape : XID → rayon OTM → Wikipedia. */
+    private String resolveImageUrl(PathStep step) {
+        // 1. XID direct (le plus fiable : c'est exactement le POI sélectionné)
+        String xid = step.getXid();
+        if (xid != null && !xid.isEmpty()) {
+            String url = fetchImageUrlByXid(xid);
+            if (url != null) return url;
+        }
+        // 2. Recherche OTM par coordonnées
+        if (step.getLatitude() != 0 || step.getLongitude() != 0) {
+            String url = fetchImageUrlFromOTM(step.getLatitude(), step.getLongitude());
+            if (url != null) return url;
+        }
+        // 3. Wikipedia par nom
+        return fetchImageUrlFromWikipedia(step.getName());
+    }
+
+    /** Récupère l'image d'un POI directement via son XID OpenTripMap. */
+    private String fetchImageUrlByXid(String xid) {
+        try {
+            URL url = new URL("https://api.opentripmap.com/0.1/en/places/xid/"
+                    + xid + "?apikey=" + OTM_API_KEY);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
+            if (conn.getResponseCode() != 200) return null;
+
+            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = r.readLine()) != null) sb.append(l);
+            r.close();
+
+            JSONObject detail = new JSONObject(sb.toString());
+            String imgUrl = null;
+            if (detail.has("preview")) {
+                imgUrl = detail.getJSONObject("preview").optString("source", null);
+            }
+            if (imgUrl == null || imgUrl.isEmpty()) {
+                String img = detail.optString("image", "");
+                if (img.startsWith("http")) imgUrl = img;
+            }
+            return (imgUrl != null && !imgUrl.isEmpty()) ? imgUrl : null;
+        } catch (Exception e) {
+            Log.d("PathDetail", "XID fetch failed for " + xid + ": " + e.getMessage());
+            return null;
         }
     }
 
@@ -266,9 +320,8 @@ public class PathDetailFragment extends Fragment {
 
             JSONArray features = new JSONArray(sb.toString());
             for (int i = 0; i < features.length(); i++) {
-                JSONObject props = features.getJSONObject(i).optJSONObject("properties");
-                if (props == null) continue;
-                String xid = props.optString("xid", "");
+                JSONObject poi = features.getJSONObject(i); // format=json : tableau plat, pas GeoJSON
+                String xid = poi.optString("xid", "");
                 if (xid.isEmpty()) continue;
 
                 URL xidUrl = new URL("https://api.opentripmap.com/0.1/en/places/xid/"
@@ -307,12 +360,9 @@ public class PathDetailFragment extends Fragment {
         try {
             String encoded = java.net.URLEncoder.encode(name, "UTF-8");
             for (String lang : new String[]{"fr", "en"}) {
-                URL searchUrl = new URL("https://" + lang
-                        + ".wikipedia.org/w/api.php?action=query"
-                        + "&generator=search&gsrsearch=" + encoded
-                        + "&gsrlimit=1&prop=pageimages&piprop=thumbnail"
-                        + "&pithumbsize=600&format=json");
-                HttpURLConnection conn = (HttpURLConnection) searchUrl.openConnection();
+                URL wikiUrl = new URL("https://" + lang
+                        + ".wikipedia.org/api/rest_v1/page/summary/" + encoded);
+                HttpURLConnection conn = (HttpURLConnection) wikiUrl.openConnection();
                 conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
                 conn.setConnectTimeout(6000);
                 conn.setReadTimeout(6000);
@@ -326,15 +376,8 @@ public class PathDetailFragment extends Fragment {
                 r.close();
 
                 JSONObject data = new JSONObject(sb.toString());
-                JSONObject query = data.optJSONObject("query");
-                if (query == null) continue;
-                JSONObject pages = query.optJSONObject("pages");
-                if (pages == null || pages.length() == 0) continue;
-
-                JSONObject page = pages.getJSONObject(pages.keys().next());
-                JSONObject thumbnail = page.optJSONObject("thumbnail");
-                if (thumbnail == null) continue;
-                String imgUrl = thumbnail.optString("source", null);
+                if (!data.has("thumbnail")) continue;
+                String imgUrl = data.getJSONObject("thumbnail").optString("source", null);
                 if (imgUrl != null && !imgUrl.isEmpty()) return imgUrl;
             }
         } catch (Exception e) {
@@ -379,36 +422,35 @@ public class PathDetailFragment extends Fragment {
             tvNoDesc.setVisibility(View.VISIBLE);
         }
 
-        // --- Image ---
+        // --- Image : base64 → imageUrl connue → resolveImageUrl (XID → OTM → Wikipedia) ---
         ImageView imgView = sheet.findViewById(R.id.sheet_img);
-        String imageUrl = step.getImageUrl();
         String b64 = step.getImageBase64();
-        if (imageUrl != null && !imageUrl.isEmpty()) {
-            // URL déjà disponible (enrichissement effectué avant publication)
-            executor.execute(() -> {
-                Bitmap bmp = downloadBitmap(imageUrl);
-                mainHandler.post(() -> {
-                    if (!isAdded() || bmp == null) return;
-                    imgView.setImageBitmap(bmp);
-                });
-            });
-        } else if (b64 != null && !b64.isEmpty()) {
-            // Photo choisie manuellement
+        if (b64 != null && !b64.isEmpty()) {
             Bitmap bmp = ImageUtils.base64ToBitmap(b64);
             if (bmp != null) imgView.setImageBitmap(bmp);
         } else {
-            // Pas encore enrichi : chercher OTM puis Wikipedia à la demande
             executor.execute(() -> {
-                String url = null;
-                if (step.getLatitude() != 0 || step.getLongitude() != 0) {
-                    url = fetchImageUrlFromOTM(step.getLatitude(), step.getLongitude());
+                Bitmap bmp = null;
+
+                // 1. URL déjà connue sur l'étape
+                String knownUrl = step.getImageUrl();
+                if (knownUrl != null && !knownUrl.isEmpty()) {
+                    bmp = downloadBitmap(knownUrl);
                 }
-                if (url == null) url = fetchImageUrlFromWikipedia(step.getName());
-                if (url != null) step.setImageUrl(url);
-                Bitmap bmp = url != null ? downloadBitmap(url) : null;
+
+                // 2. Résolution complète si l'URL a échoué ou n'existe pas
+                if (bmp == null) {
+                    String url = resolveImageUrl(step);
+                    if (url != null) {
+                        step.setImageUrl(url);
+                        bmp = downloadBitmap(url);
+                    }
+                }
+
+                final Bitmap finalBmp = bmp;
                 mainHandler.post(() -> {
-                    if (!isAdded() || bmp == null) return;
-                    imgView.setImageBitmap(bmp);
+                    if (!isAdded() || finalBmp == null) return;
+                    imgView.setImageBitmap(finalBmp);
                 });
             });
         }

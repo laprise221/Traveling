@@ -808,19 +808,34 @@ public class MapFragment extends Fragment implements LocationListener {
 
     private void fetchLiveSegment(GeoPoint from, PathStep to) {
         executor.execute(() -> {
+            List<GeoPoint> pts = new ArrayList<>();
             try {
-                String urlStr = "https://router.project-osrm.org/route/v1/foot/"
-                        + from.getLongitude() + "," + from.getLatitude() + ";"
-                        + to.getLongitude() + "," + to.getLatitude()
-                        + "?overview=full&geometries=geojson";
+                JSONArray coordsArr = new JSONArray();
+                JSONArray c1 = new JSONArray();
+                c1.put(from.getLongitude()); c1.put(from.getLatitude());
+                coordsArr.put(c1);
+                JSONArray c2 = new JSONArray();
+                c2.put(to.getLongitude()); c2.put(to.getLatitude());
+                coordsArr.put(c2);
 
-                URL url = new URL(urlStr);
+                JSONObject body = new JSONObject();
+                body.put("coordinates", coordsArr);
+                body.put("instructions", false);
+
+                URL url = new URL(
+                        "https://api.openrouteservice.org/v2/directions/foot-walking/geojson");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("User-Agent", "TravelingApp/1.0");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Authorization", ORS_API_KEY);
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setRequestProperty("Accept", "application/json, application/geo+json");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(15000);
+                conn.setDoOutput(true);
+                try (java.io.OutputStream os = conn.getOutputStream()) {
+                    os.write(body.toString().getBytes("UTF-8"));
+                }
 
-                List<GeoPoint> pts = new ArrayList<>();
                 if (conn.getResponseCode() == 200) {
                     BufferedReader reader = new BufferedReader(
                             new InputStreamReader(conn.getInputStream()));
@@ -830,43 +845,40 @@ public class MapFragment extends Fragment implements LocationListener {
                     reader.close();
 
                     JSONObject json = new JSONObject(sb.toString());
-                    if ("Ok".equals(json.optString("code", ""))) {
-                        JSONArray routes = json.getJSONArray("routes");
-                        if (routes.length() > 0) {
-                            JSONArray coords = routes.getJSONObject(0)
-                                    .getJSONObject("geometry").getJSONArray("coordinates");
-                            for (int i = 0; i < coords.length(); i++) {
-                                JSONArray c = coords.getJSONArray(i);
-                                pts.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
-                            }
+                    JSONArray features = json.optJSONArray("features");
+                    if (features != null && features.length() > 0) {
+                        JSONArray coords = features.getJSONObject(0)
+                                .getJSONObject("geometry").getJSONArray("coordinates");
+                        for (int i = 0; i < coords.length(); i++) {
+                            JSONArray c = coords.getJSONArray(i);
+                            pts.add(new GeoPoint(c.getDouble(1), c.getDouble(0)));
                         }
                     }
                 }
-
-                if (pts.isEmpty()) {
-                    pts.add(from);
-                    pts.add(new GeoPoint(to.getLatitude(), to.getLongitude()));
-                }
-
-                List<GeoPoint> finalPts = pts;
-                mainHandler.post(() -> {
-                    liveRouteFetching = false;
-                    if (!isAdded()) return;
-                    if (liveSegmentPolyline != null) {
-                        mapView.getOverlays().remove(liveSegmentPolyline);
-                    }
-                    liveSegmentPolyline = new Polyline(mapView);
-                    liveSegmentPolyline.setPoints(finalPts);
-                    liveSegmentPolyline.getOutlinePaint().setColor(Color.parseColor("#FF6B35"));
-                    liveSegmentPolyline.getOutlinePaint().setStrokeWidth(12f);
-                    liveSegmentPolyline.getOutlinePaint().setAntiAlias(true);
-                    mapView.getOverlayManager().add(liveSegmentPolyline);
-                    mapView.invalidate();
-                });
             } catch (Exception e) {
                 Log.e("MapFragment", "Live segment fetch error", e);
-                mainHandler.post(() -> liveRouteFetching = false);
             }
+
+            if (pts.isEmpty()) {
+                pts.add(from);
+                pts.add(new GeoPoint(to.getLatitude(), to.getLongitude()));
+            }
+
+            List<GeoPoint> finalPts = pts;
+            mainHandler.post(() -> {
+                liveRouteFetching = false;
+                if (!isAdded()) return;
+                if (liveSegmentPolyline != null) {
+                    mapView.getOverlays().remove(liveSegmentPolyline);
+                }
+                liveSegmentPolyline = new Polyline(mapView);
+                liveSegmentPolyline.setPoints(finalPts);
+                liveSegmentPolyline.getOutlinePaint().setColor(Color.parseColor("#FF6B35"));
+                liveSegmentPolyline.getOutlinePaint().setStrokeWidth(12f);
+                liveSegmentPolyline.getOutlinePaint().setAntiAlias(true);
+                mapView.getOverlayManager().add(liveSegmentPolyline);
+                mapView.invalidate();
+            });
         });
     }
 
