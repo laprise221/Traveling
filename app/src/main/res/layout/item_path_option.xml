@@ -150,7 +150,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Distance"
+                        android:text="Dist. / Durée"
                         android:textSize="10sp"
                         android:textAllCaps="true"
                         android:letterSpacing="0.05"
